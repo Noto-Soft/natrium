@@ -1,0 +1,36 @@
+NatriumFS v1
+
+Block = 2 512b sectors
+
+Boot block: Block 0 (Sectors 0-1)
+Superblock: Block 1 (Sectors 2-3)
+Root directory: Block 2-5 (Sectors 4-11) (4 blocks)
+Data blocks: Block 6-[size of disk in kb - 1] (Sectors 12-[size of disk in kb/2 - 1])
+
+Superblock layout:
+16 byte volume name padded with spaces
+1 byte for NatriumFS version (should be 0x01 for v1)
+Rest of block reserved
+
+Directory block(s) layout:
+byte for max directory entries (can be up to 255), 31 zero bytes to align to 32 bytes
+Repeated 32 byte entries until blocks run out
+
+Root directory will always have 127 max entries
+
+Entry layout:
+16 bytes name, no zero terminator, padded with spaces
+Word for file starting block, byte for how many blocks to load, attribute byte
+Word for padding length (how many zeroes added to expand it to a 1kb block). Probably useful for something. You can subtract this from the file size * 1024 to get the actual byte size of the file.
+10 zero bytes for aligning to 32 bytes
+If the first byte of the name is 0 then assume the file entry is free
+
+attribute byte: (or'd together)
+~0x80 - Normal file (anything without the highest bit set)
+0x80 - Directory (anything with the highest bit set)
+Rest reserved
+
+Subdirectories:
+Check for a file with the attribute 0x80 and the name of the directory you're searching for. It shouldn't have a period in the name but it can if you want
+Load the entire directory into memory in a safe buffer, this buffer needs to be 8kb to fit the max directory entries. Also never trust the file size directly and if it's greater than 8 blocks, set it to 8 blocks.
+Now you can loop through this directory buffer for whatever file you want from it
