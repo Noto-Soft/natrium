@@ -255,7 +255,7 @@ disk_reset:
 ; ax - block number
 ; cl - amount of blocks
 ; dl - drive
-; es:bx - address
+; es:bx - address (you should always make sure the offset is aligned to 1kb if this will write over segment boundaries)
 read_blocks:
     push ax
     push bx

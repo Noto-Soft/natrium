@@ -38,7 +38,7 @@ main:
 
     call enable_cursor
 
-    mov ax, 0
+    xor ax, ax
     mov dl, [drive]
     lea si, [folder_natrium]
     call get_file
@@ -46,14 +46,13 @@ main:
     jz .failure
     test ch, 0x80
     jz .failure
-
     jmp .start_reading_files
 .failure:
     mov bl, 0x7
     lea si, [natrium]
     call puts
 
-    jmp .patching
+    jmp $
 .start_reading_files:
     mov [folder_natrium_block], ax
     mov [folder_natrium_size], cl
@@ -115,6 +114,7 @@ main:
     patch 0x21, int21, ax
     patch 0x22, int22, ax
     patch 0x23, int23, ax
+    patch 0x24, int24, ax
     pop es
 
     mov bl, 0x7
@@ -236,7 +236,7 @@ int21:
     call word [cs:call_value]
     iret
 .call_table:
-    dw puts, putc, poke_char, set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, clear_screen, scroll_screen
+    dw puts, putc, poke_char, puts_length, putd, set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, clear_screen, scroll_screen
     dw (256-($-.call_table))/2 dup(nothing)
 
 int22:
@@ -244,6 +244,10 @@ int22:
     iret
 
 int23:
+    call write_blocks
+    iret
+
+int24:
     call get_file
     iret
 
@@ -431,6 +435,46 @@ puts_length:
     pop ax
     ret
 
+putd:
+    push ax
+    push bx
+    push dx
+    push si
+
+    xor si, si
+
+    or cx, cx
+    jnz .convert
+
+    mov al, '0'
+    call putc
+    jmp .done
+.convert:
+    mov ax, cx
+.next_digit:
+    xor dx, dx
+    push bx
+    mov bx, 10
+    div bx
+    pop bx
+    push dx
+    inc si
+    or ax, ax
+    jnz .next_digit
+.print_digits:
+    pop dx
+    add dl, '0'
+    mov al, dl
+    call putc
+    dec si
+    jnz .print_digits
+.done:
+    pop si
+    pop dx
+    pop bx
+    pop ax
+    ret
+
 ; bl - formatting byte
 clear_screen:
     push ax
@@ -541,6 +585,43 @@ disk_read:
     pop ax
     ret
 
+disk_write:
+    push ax
+    push bx
+    push cx
+    push dx
+    push di
+
+    push cx
+    call lba_to_chs
+    pop ax
+    
+    mov ah, 0x3
+    mov di, 3
+.retry:
+    pusha
+    stc
+    int 0x13
+    jnc .done
+
+    popa
+    call disk_reset
+
+    dec di
+    test di, di
+    jnz .retry
+.fail:
+    jmp floppy_error
+.done:
+    popa
+
+    pop di
+    pop dx
+    pop cx
+    pop bx
+    pop ax
+    ret
+
 disk_reset:
     pusha
     xor ah, ah
@@ -553,7 +634,7 @@ disk_reset:
 ; ax - block number
 ; cl - amount of blocks
 ; dl - drive
-; es:bx - address
+; es:bx - address (you should always make sure the offset is aligned to 1kb if this will write over segment boundaries)
 read_blocks:
     push ax
     push bx
@@ -567,6 +648,41 @@ read_blocks:
     push cx
     mov cl, 2
     call disk_read
+    pop cx
+    add ax, 2
+    add bx, 1024
+    test bx, bx
+    jnz .loop
+    push ax
+    mov ax, es
+    add ax, 0x1000
+    mov es, ax
+    pop ax
+    jmp .loop
+.done:
+    pop es
+    pop cx
+    pop bx
+    pop ax
+    ret
+
+; ax - block number
+; cl - amount of blocks
+; dl - drive
+; es:bx - address (you should always make sure the offset is aligned to 1kb if this will read over segment boundaries)
+write_blocks:
+    push ax
+    push bx
+    push cx
+    push es
+    shl ax, 1
+.loop:
+    test cl, cl
+    jz .done
+    dec cl
+    push cx
+    mov cl, 2
+    call disk_write
     pop cx
     add ax, 2
     add bx, 1024
@@ -617,8 +733,8 @@ get_file:
 
     pop ax
 
-    cmp ax, 0
-    je .read_root
+    or ax, ax
+    jz .read_root
 
     cmp cl, 8
     jng .read_directory
@@ -626,6 +742,12 @@ get_file:
 .read_directory:
     lea bx, [buffer]
     call read_blocks
+
+    mov al, [buffer]
+    cmp al, 255
+    jng .init_loop
+
+    mov byte [buffer], 255
 
     jmp .init_loop
 .read_root:
@@ -669,8 +791,6 @@ get_file:
     pop bx
     pop es
     pop di
-    pop cx
-    pop bx
     xor ax, ax
     xor cl, cl
     ret
@@ -689,13 +809,15 @@ error_wrong_filesystem db "Incorrect fs version", endl, 0
 cursor_shape dw 0x003f
 cursor_position dw 0
 
-natrium db "Natrium", endl, endl, "'boot.txt' missing...", endl, 0
+natrium db "Natrium", endl, endl, "Critical files missing...", endl, 0
 
 directory_of_root db "Directory of A:/", endl, 0
 directory_of_natrium db "Directory of A:/natrium/", endl, 0
 
 str_file db "FILE", endl, 0
 str_directory db "DIRECTORY", endl, 0
+
+align 16
 
 folder_natrium db "natrium         "
 file_logo_txt db "logo.txt        "

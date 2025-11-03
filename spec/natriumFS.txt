@@ -10,6 +10,7 @@ Data blocks: Block 6-[size of disk in kb - 1] (Sectors 12-[size of disk in kb/2 
 Superblock layout:
 16 byte volume name padded with spaces
 1 byte for NatriumFS version (should be 0x01 for v1)
+1 word for the next free block
 Rest of block reserved
 
 Directory block(s) layout:

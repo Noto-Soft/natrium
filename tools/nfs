@@ -3,22 +3,21 @@ import os
 import struct
 import argparse
 
-# NatriumFS v1 constants (per your spec)
+# NatriumFS v1 constants
 BLOCK_SIZE = 1024                 # 2 * 512
 ROOT_DIR_BLOCKS = 4               # root directory uses blocks 2-5 (4 blocks)
-MAX_DIR_BLOCKS_TO_READ = 8        # when reading a directory buffer, cap at 8 blocks (safe upper limit)
-ROOT_DIR_MAX_ENTRIES = 127        # root directory will always have 127 max entries
+MAX_DIR_BLOCKS_TO_READ = 8        # safe cap when reading directories
+ROOT_DIR_MAX_ENTRIES = 127         # max entries in root dir
 ATTR_FILE = 0x00
 ATTR_DIR = 0x80
+SUPERBLOCK_NEXT_BLOCK_OFFSET = 17  # offset of next free block word in superblock
 
-# Offsets inside a 32-byte directory entry (for clarity)
-OFF_NAME = 0        # 16 bytes
-OFF_START = 16      # 2 bytes (word)
-OFF_NUM_BLOCKS = 18 # 1 byte
-OFF_ATTR = 19       # 1 byte
-OFF_PADDING = 20    # 2 bytes (word)
-# OFF_RESERVED = 22..31 (10 bytes)
-
+# Directory entry offsets
+OFF_NAME = 0
+OFF_START = 16
+OFF_NUM_BLOCKS = 18
+OFF_ATTR = 19
+OFF_PADDING = 20
 
 class NatriumFS:
     def __init__(self, path):
@@ -36,39 +35,41 @@ class NatriumFS:
             self.disk.close()
             self.disk = None
 
+    # ---- Superblock helpers ----
+    def _read_next_free_block(self):
+        self.disk.seek(BLOCK_SIZE + SUPERBLOCK_NEXT_BLOCK_OFFSET)
+        return struct.unpack('<H', self.disk.read(2))[0]
+
+    def _write_next_free_block(self, block_num):
+        self.disk.seek(BLOCK_SIZE + SUPERBLOCK_NEXT_BLOCK_OFFSET)
+        self.disk.write(struct.pack('<H', block_num))
+
+    # ---- Disk creation ----
     def create(self, size_kb, volume_name="NATRIUM"):
-        """
-        Create a new disk image following the layout in your spec:
-        - Block 0 = boot block (1 KB)
-        - Block 1 = superblock (1 KB)
-        - Blocks 2-5 = root directory (4 KB)
-        - Data blocks start at block 6
-        """
         total_bytes = size_kb * 1024
         with open(self.path, "wb") as f:
-            # Boot block (block 0)
+            # Boot block
             f.write(b'\x00' * BLOCK_SIZE)
 
-            # Superblock (block 1)
+            # Superblock
             name = volume_name.ljust(16).encode('ascii')[:16]
-            f.write(name)            # 16 bytes volume name
-            f.write(b'\x01')         # FS version = 0x01
-            f.write(b'\x00' * (BLOCK_SIZE - 17))
+            f.write(name)
+            f.write(b'\x01')                  # FS version
+            f.write(struct.pack('<H', 6))     # next free block = 6
+            f.write(b'\x00' * (BLOCK_SIZE - 19))
 
-            # Root directory (blocks 2..5) initialize:
-            # byte for max directory entries, then 31 zeros to align to 32 bytes,
-            # then zero out the remaining directory area.
+            # Root directory
             f.write(bytes([ROOT_DIR_MAX_ENTRIES]))
             f.write(b'\x00' * 31)
             f.write(b'\x00' * (BLOCK_SIZE * ROOT_DIR_BLOCKS - 32))
 
-            # fill remaining disk
+            # Fill remaining disk
             remaining = total_bytes - f.tell()
             if remaining < 0:
                 raise ValueError("Disk size too small for filesystem structures")
             f.write(b'\x00' * remaining)
 
-    # low-level block IO
+    # ---- Low-level block IO ----
     def _read_block(self, block_num, size=BLOCK_SIZE):
         self.disk.seek(block_num * BLOCK_SIZE)
         return self.disk.read(size)
@@ -79,46 +80,29 @@ class NatriumFS:
         self.disk.seek(block_num * BLOCK_SIZE)
         self.disk.write(data.ljust(BLOCK_SIZE, b'\x00'))
 
-    # directory buffer helpers
+    # ---- Directory helpers ----
     def _read_dir_buffer(self, start_block, num_blocks):
-        """
-        Read a directory buffer from disk with safety checks.
-        Cap num_blocks to MAX_DIR_BLOCKS_TO_READ to avoid untrusted sizes.
-        Returns a bytes object of size (read_blocks * BLOCK_SIZE).
-        """
         read_blocks = min(num_blocks, MAX_DIR_BLOCKS_TO_READ)
-        size = read_blocks * BLOCK_SIZE
-        return self._read_block(start_block, size)
+        return self._read_block(start_block, read_blocks * BLOCK_SIZE)
 
     def _write_dir_buffer(self, start_block, buf, blocks=ROOT_DIR_BLOCKS):
-        """
-        Write 'blocks' blocks from buf back to disk starting at start_block.
-        buf must be >= blocks * BLOCK_SIZE bytes.
-        """
         for i in range(blocks):
             chunk = buf[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
             self._write_block(start_block + i, chunk)
 
     def _parse_dir_buffer(self, buf):
-        """
-        Parse a directory buffer (bytes) into a list of entries.
-        Each entry is a dict with name, start_block, num_blocks, attr, padding.
-        """
         entries = []
-        max_entries = ROOT_DIR_MAX_ENTRIES
-        # directory header occupies first 32 bytes; entries start at offset 32
-        for i in range(max_entries):
+        for i in range(ROOT_DIR_MAX_ENTRIES):
             offset = 32 + i * 32
             if offset + 32 > len(buf):
                 break
             entry = buf[offset:offset + 32]
             if entry[0] == 0:
-                continue  # free entry
+                continue
             name = entry[OFF_NAME:OFF_NAME + 16].decode('ascii', errors='ignore').rstrip()
             start_block, = struct.unpack('<H', entry[OFF_START:OFF_START + 2])
             num_blocks = entry[OFF_NUM_BLOCKS]
             attr = entry[OFF_ATTR]
-            # read padding as a little-endian word
             padding = struct.unpack('<H', entry[OFF_PADDING:OFF_PADDING + 2])[0]
             entries.append({
                 "name": name,
@@ -130,28 +114,18 @@ class NatriumFS:
         return entries
 
     def list_dir(self, start_block=2):
-        """
-        List entries in a directory located at start_block.
-        For root this reads ROOT_DIR_BLOCKS. For generality we read ROOT_DIR_BLOCKS blocks.
-        """
         buf = self._read_block(start_block, BLOCK_SIZE * ROOT_DIR_BLOCKS)
         return self._parse_dir_buffer(buf)
 
     def find_dir_by_name(self, name):
-        """
-        Find a subdirectory entry in root by name. Return its start_block or None.
-        """
         for e in self.list_dir(2):
             if e['name'] == name and (e['attr'] & ATTR_DIR):
                 return e['start_block']
         return None
 
+    # ---- Directory creation ----
     def mkdir(self, name):
-        """
-        Create a subdirectory in the root directory. Allocates ROOT_DIR_BLOCKS for it.
-        """
         root_buf = bytearray(self._read_block(2, BLOCK_SIZE * ROOT_DIR_BLOCKS))
-        # find free root entry
         offset = None
         for i in range(ROOT_DIR_MAX_ENTRIES):
             off = 32 + i * 32
@@ -161,77 +135,31 @@ class NatriumFS:
         if offset is None:
             raise RuntimeError("No free directory entries in root")
 
-        # compute used blocks globally
-        used_blocks = set()
-        # root entries
-        existing_root = self._parse_dir_buffer(root_buf)
-        for e in existing_root:
-            for b in range(e['start_block'], e['start_block'] + e['num_blocks']):
-                used_blocks.add(b)
-        # scan subdirs too (safe listing: cap to 8 blocks)
-        for e in existing_root:
-            if e['attr'] & ATTR_DIR:
-                dir_buf = self._read_dir_buffer(e['start_block'], e['num_blocks'])
-                sub_entries = self._parse_dir_buffer(dir_buf)
-                for se in sub_entries:
-                    for b in range(se['start_block'], se['start_block'] + se['num_blocks']):
-                        used_blocks.add(b)
+        # allocate using next_free_block
+        start_block = self._read_next_free_block()
+        self._write_next_free_block(start_block + ROOT_DIR_BLOCKS)
 
-        # find a free contiguous range for ROOT_DIR_BLOCKS
-        start_block = 6
-        while any(b in used_blocks for b in range(start_block, start_block + ROOT_DIR_BLOCKS)):
-            start_block += 1
-
-        # initialize empty directory buffer for the new directory
+        # initialize empty directory buffer
         empty_dir = bytes([ROOT_DIR_MAX_ENTRIES]) + b'\x00' * 31
         empty_dir += b'\x00' * (BLOCK_SIZE * ROOT_DIR_BLOCKS - 32)
         for i in range(ROOT_DIR_BLOCKS):
             self._write_block(start_block + i, empty_dir[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE])
 
-        # write directory entry into root buffer
+        # write directory entry
         entry = bytearray(32)
         entry[OFF_NAME:OFF_NAME + 16] = name.ljust(16).encode('ascii')[:16]
         entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
         entry[OFF_NUM_BLOCKS] = ROOT_DIR_BLOCKS
         entry[OFF_ATTR] = ATTR_DIR
-        # padding word = 0
         entry[OFF_PADDING:OFF_PADDING + 2] = struct.pack('<H', 0)
         entry[22:32] = b'\x00' * 10
 
         root_buf[offset:offset + 32] = bytes(entry)
-        # write back root directory
-        for i in range(ROOT_DIR_BLOCKS):
-            self._write_block(2 + i, root_buf[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE])
-
+        self._write_dir_buffer(2, root_buf)
         return start_block
 
-    def _gather_used_blocks(self):
-        """
-        Return a set of all blocks already used by files and directories (root + subdirs).
-        This helps when allocating space for new files or directories.
-        """
-        used = set()
-        # root entries
-        root_buf = self._read_block(2, BLOCK_SIZE * ROOT_DIR_BLOCKS)
-        root_entries = self._parse_dir_buffer(root_buf)
-        for e in root_entries:
-            for b in range(e['start_block'], e['start_block'] + e['num_blocks']):
-                used.add(b)
-        # subdirectory entries
-        for e in root_entries:
-            if e['attr'] & ATTR_DIR:
-                dir_buf = self._read_dir_buffer(e['start_block'], e['num_blocks'])
-                sub_entries = self._parse_dir_buffer(dir_buf)
-                for se in sub_entries:
-                    for b in range(se['start_block'], se['start_block'] + se['num_blocks']):
-                        used.add(b)
-        return used
-
+    # ---- File allocation ----
     def add_file(self, file_path, target_name=None, parent_block=2):
-        """
-        Add a file to the directory whose directory block is parent_block (root by default).
-        Stores a padding word so extraction can safely trim trailing zeros.
-        """
         if target_name is None:
             target_name = os.path.basename(file_path)
         with open(file_path, 'rb') as f:
@@ -241,9 +169,7 @@ class NatriumFS:
         if num_blocks == 0:
             num_blocks = 1
 
-        # read the parent directory buffer
         parent_buf = bytearray(self._read_block(parent_block, BLOCK_SIZE * ROOT_DIR_BLOCKS))
-        # find a free entry in the parent dir buffer
         entry_offset = None
         for i in range(ROOT_DIR_MAX_ENTRIES):
             off = 32 + i * 32
@@ -253,46 +179,37 @@ class NatriumFS:
         if entry_offset is None:
             raise RuntimeError("No free directory entries in target directory")
 
-        # find free blocks globally
-        used_blocks = self._gather_used_blocks()
-        start_block = 6
-        while any(b in used_blocks for b in range(start_block, start_block + num_blocks)):
-            start_block += 1
+        # allocate using next_free_block
+        start_block = self._read_next_free_block()
+        self._write_next_free_block(start_block + num_blocks)
 
-        # write file data into blocks
+        # write file data
         for i in range(num_blocks):
             chunk = data[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
             self._write_block(start_block + i, chunk)
 
-        # compute padding and write directory entry
+        # compute padding
         padding = (num_blocks * BLOCK_SIZE) - file_size
         if padding < 0:
             padding = 0
-        # clamp to 0..(BLOCK_SIZE-1) just in case
         if padding >= BLOCK_SIZE:
             padding = BLOCK_SIZE - 1
 
+        # write directory entry
         entry = bytearray(32)
         entry[OFF_NAME:OFF_NAME + 16] = target_name.ljust(16).encode('ascii')[:16]
         entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
         entry[OFF_NUM_BLOCKS] = num_blocks
         entry[OFF_ATTR] = ATTR_FILE
-        # store padding as a 16-bit little-endian word
         entry[OFF_PADDING:OFF_PADDING + 2] = struct.pack('<H', padding)
         entry[22:32] = b'\x00' * 10
 
         parent_buf[entry_offset:entry_offset + 32] = bytes(entry)
-        # write back parent directory (ROOT_DIR_BLOCKS blocks)
-        for i in range(ROOT_DIR_BLOCKS):
-            self._write_block(parent_block + i, parent_buf[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE])
-
+        self._write_dir_buffer(parent_block, parent_buf)
         return start_block
 
+    # ---- File reading ----
     def read_file(self, file_name, out_path=None, parent_block=2):
-        """
-        Read a file from a directory (root by default). Trim padding per the stored padding word.
-        """
-        # read parent dir buffer and parse
         buf = self._read_block(parent_block, BLOCK_SIZE * ROOT_DIR_BLOCKS)
         entries = self._parse_dir_buffer(buf)
         for e in entries:
@@ -300,30 +217,19 @@ class NatriumFS:
                 data = bytearray()
                 for i in range(e['num_blocks']):
                     data.extend(self._read_block(e['start_block'] + i))
-
                 padding = int(e.get('padding', 0) or 0)
-                # defensive clamp: padding cannot exceed BLOCK_SIZE-1 per design and not exceed data len
-                if padding < 0:
-                    padding = 0
-                if padding >= BLOCK_SIZE:
-                    padding = BLOCK_SIZE - 1
-                if padding > len(data):
-                    padding = len(data)
-
-                total_bytes = (e['num_blocks'] * BLOCK_SIZE) - padding
+                padding = max(0, min(padding, BLOCK_SIZE - 1, len(data)))
+                total_bytes = e['num_blocks'] * BLOCK_SIZE - padding
                 data = bytes(data[:total_bytes])
                 if out_path:
+                    os.makedirs(os.path.dirname(out_path), exist_ok=True)
                     with open(out_path, 'wb') as f:
                         f.write(data)
                 return data
         raise FileNotFoundError(file_name)
 
+    # ---- Directory extraction ----
     def extract_all(self, output_dir, parent_block=2, rel_path=""):
-        """
-        Recursively extract root and its first-level subdirectories to the host filesystem.
-        - Creates directories on host matching subdirectories on disk.
-        - Writes original files and also CP437->UTF-8 decoded .txt copies.
-        """
         target_dir = os.path.join(output_dir, rel_path)
         os.makedirs(target_dir, exist_ok=True)
 
@@ -333,49 +239,32 @@ class NatriumFS:
         for e in entries:
             if e['attr'] & ATTR_DIR:
                 sub_rel = os.path.join(rel_path, e['name'])
-                print(f"[DIR] {sub_rel}")
                 read_blocks = min(e['num_blocks'], MAX_DIR_BLOCKS_TO_READ)
                 self._extract_dir_to_host(output_dir, e['start_block'], sub_rel, read_blocks)
             else:
                 self._write_file_and_decode(e, output_dir, rel_path)
 
-
     def _extract_dir_to_host(self, output_dir, dir_start_block, rel_path, read_blocks):
-        """
-        Helper to extract a directory's contents (dir_start_block, read_blocks) into host path rel_path.
-        Also writes CP437->UTF-8 decoded .txt copies.
-        """
         target_dir = os.path.join(output_dir, rel_path)
         os.makedirs(target_dir, exist_ok=True)
-
         buf = self._read_block(dir_start_block, BLOCK_SIZE * read_blocks)
         entries = self._parse_dir_buffer(buf)
-
         for e in entries:
             if e['attr'] & ATTR_DIR:
-                # nested directories beyond one level are not supported
-                print(f"[SKIP-DEEP] {os.path.join(rel_path, e['name'])} (nested directories not supported)")
+                print(f"[SKIP-DEEP] {os.path.join(rel_path, e['name'])} (nested dirs not supported)")
                 continue
             self._write_file_and_decode(e, output_dir, rel_path)
 
-
     def _write_file_and_decode(self, e, output_dir, rel_path):
-        """
-        Write a file entry to host filesystem, trim padding, and decode CP437 -> UTF-8 for .txt files.
-        """
         out_path = os.path.join(output_dir, rel_path, e['name'])
-        # read file blocks
         data = b''.join(self._read_block(e['start_block'] + i) for i in range(e['num_blocks']))
         total_bytes = e['num_blocks'] * BLOCK_SIZE - e.get('padding', 0)
         data = data[:total_bytes]
-
-        # write original bytes
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, 'wb') as f:
             f.write(data)
         print(f"[FILE] {os.path.join(rel_path, e['name'])} ({len(data)} bytes)")
 
-        # CP437 → UTF-8 conversion for .txt files
         if e['name'].lower().endswith(".txt"):
             try:
                 decoded_text = data.decode('cp437')
@@ -386,6 +275,7 @@ class NatriumFS:
             except Exception as ex:
                 print(f"[DECODE-ERROR] {e['name']}: {ex}")
 
+# ---- CLI ----
 def main():
     parser = argparse.ArgumentParser(description="NatriumFS v1 utility")
     parser.add_argument("disk", help="Path to NatriumFS disk image")
@@ -468,7 +358,6 @@ def main():
 
     finally:
         fs.close()
-
 
 if __name__ == "__main__":
     main()
