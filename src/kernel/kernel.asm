@@ -814,8 +814,8 @@ natrium db "Natrium", endl, endl, "Critical files missing...", endl, 0
 directory_of_root db endl, "Directory of A:/", endl, " ", 0
 directory_of_natrium db endl, "Directory of A:/natrium/", endl, " ", 0
 
-str_file db "FILE", endl, 0
-str_directory db "DIRECTORY", endl, 0
+str_file db "FILE", endl, " ", 0
+str_directory db "DIRECTORY", endl, " ", 0
 
 align 16
 
