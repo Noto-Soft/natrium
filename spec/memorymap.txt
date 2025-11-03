@@ -1,5 +1,7 @@
 0x0500-0x0fff: technically free
 0x1000-0x1fff: reserved for kernel (keeper of the interrupts)
-0x2000-0x8fff: freedom
+0x2000-0x3fff: kernel programs and program memory
+0x4000-0x6fff: completely free
+0x7000-0x8fff: user programs and program memory
 0x9000-0x9fff: stack
 everything else: defined by x86 memory map

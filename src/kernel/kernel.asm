@@ -40,7 +40,7 @@ main:
 
     xor ax, ax
     mov dl, [drive]
-    lea si, [folder_natrium]
+    lea si, [folder_system]
     call get_file
     test cl, cl
     jz .failure
@@ -54,8 +54,8 @@ main:
 
     jmp $
 .start_reading_files:
-    mov [folder_natrium_block], ax
-    mov [folder_natrium_size], cl
+    mov [folder_system_block], ax
+    mov [folder_system_size], cl
 
     mov dl, [drive]
     lea si, [file_logo_txt]
@@ -65,8 +65,8 @@ main:
     test ch, 0x80
     jnz .failure
 
-    lea bx, [0x2000]
     push es
+    lea bx, [0x4000]
     mov es, bx
     xor bx, bx
     call read_blocks
@@ -74,7 +74,7 @@ main:
 
     push ds
     mov bl, 0xe
-    lea si, [0x2000]
+    lea si, [0x4000]
     mov ds, si
     xor si, si
     call puts
@@ -82,8 +82,8 @@ main:
 
     call clear_file_loading_space
 
-    mov ax, [folder_natrium_block]
-    mov cl, [folder_natrium_size]
+    mov ax, [folder_system_block]
+    mov cl, [folder_system_size]
     mov dl, [drive]
     lea si, [file_boot_txt]
     call get_file
@@ -92,8 +92,8 @@ main:
     test ch, 0x80
     jnz .failure
 
-    lea bx, [0x2000]
     push es
+    lea bx, [0x4000]
     mov es, bx
     xor bx, bx
     call read_blocks
@@ -101,7 +101,7 @@ main:
 
     push ds
     mov bl, 0x7
-    lea si, [0x2000]
+    lea si, [0x4000]
     mov ds, si
     xor si, si
     call puts
@@ -117,85 +117,31 @@ main:
     patch 0x24, int24, ax
     pop es
 
-    mov bl, 0x7
-    lea si, [directory_of_root]
-    call puts
-
-    mov ax, 2
-    mov cl, 4
+    mov ax, [folder_system_block]
+    mov cl, [folder_system_size]
     mov dl, [drive]
-    lea bx, [buffer]
+    lea si, [file_command_sys]
+    call get_file
+    test cl, cl
+    jz .failure
+    test ch, 0x80
+    jnz .failure
+
+    push es
+    lea bx, [0x2000]
+    mov es, bx
+    xor bx, bx
     call read_blocks
-
-    call dir
-
-    mov al, 0xa
-    call putc
-
-    mov bl, 0x7
-    lea si, [directory_of_natrium]
-    call puts
-
-    mov ax, [folder_natrium_block]
-    mov cl, [folder_natrium_size]
-    mov dl, [drive]
-    lea bx, [buffer]
-    call read_blocks
-
-    call dir
+    push cs
+    push word .return_point
+    push es
+    push bx
+    retf
+.return_point:
+    pop es
 halt:
     cli
     hlt
-
-dir:
-    pusha
-    mov bl, 0x7
-    xor cx, cx
-    mov cl, byte [buffer]
-    lea si, [buffer+32]
-.dir_loop_dirs:
-    mov al, [si]
-    test al, al
-    jz .loop_files
-    mov al, [si+19]
-    test al, 0x80
-    jz .next_dir
-    push cx
-    mov cx, 16
-    call puts_length
-    pop cx
-    push si
-    lea si, [str_directory]
-    call puts
-    pop si
-.next_dir:
-    add si, 32
-    loop .dir_loop_dirs
-.loop_files:
-    xor cx, cx
-    mov cl, byte [buffer]
-    lea si, [buffer+32]
-.dir_loop_files:
-    mov al, [si]
-    test al, al
-    jz .done
-    mov al, [si+19]
-    test al, 0x80
-    jnz .next_file
-    push cx
-    mov cx, 16
-    call puts_length
-    pop cx
-    push si
-    lea si, [str_file]
-    call puts
-    pop si
-.next_file:
-    add si, 32
-    loop .dir_loop_files
-.done:
-    popa
-    ret
 
 clear_file_loading_space:
     push ax
@@ -811,17 +757,12 @@ cursor_position dw 0
 
 natrium db "Natrium", endl, endl, "Critical files missing...", endl, 0
 
-directory_of_root db endl, "Directory of A:/", endl, " ", 0
-directory_of_natrium db endl, "Directory of A:/natrium/", endl, " ", 0
-
-str_file db "FILE", endl, " ", 0
-str_directory db "DIRECTORY", endl, " ", 0
-
 align 16
 
-folder_natrium db "natrium         "
+folder_system db "System          "
 file_logo_txt db "logo.txt        "
 file_boot_txt db "boot.txt        "
+file_command_sys db "command.sys     "
 
 drive db ?
 sectors_per_track dw ?
@@ -829,7 +770,7 @@ heads dw ?
 
 call_value dw ?
 
-folder_natrium_block dw ?
-folder_natrium_size db ?
+folder_system_block dw ?
+folder_system_size db ?
 
 buffer rb 8192

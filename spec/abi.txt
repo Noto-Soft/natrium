@@ -1,0 +1,4 @@
+executables (.exe) files get passed the current working directory name as well as the drive number in bp and dl respectively
+es:si also contains the arguments to the program if any
+
+executables are always loaded at the offset 0 in the segment
