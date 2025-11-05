@@ -30,7 +30,7 @@ main:
     mov dl, [drive]
     lea si, [folder_system]
     int 0x24
-    test ax, ax
+    test cl, cl
     jz exit
     test ch, 0x80
     jz exit

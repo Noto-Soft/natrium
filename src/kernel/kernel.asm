@@ -73,7 +73,7 @@ main:
     pop es
 
     push ds
-    mov bl, 0xe
+    mov bl, 0x2
     lea si, [0x4000]
     mov ds, si
     xor si, si
