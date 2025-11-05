@@ -683,17 +683,11 @@ get_file:
     jz .read_root
 
     cmp cl, 8
-    jng .read_directory
+    jna .read_directory
     mov cl, 8
 .read_directory:
     lea bx, [buffer]
     call read_blocks
-
-    mov al, [buffer]
-    cmp al, 255
-    jng .init_loop
-
-    mov byte [buffer], 255
 
     jmp .init_loop
 .read_root:

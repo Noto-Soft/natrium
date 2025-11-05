@@ -28,6 +28,7 @@ If the first byte of the name is 0 then assume the file entry is free
 
 attribute byte: (or'd together)
 ~0x80 - Normal file (anything without the highest bit set)
+0x01 - System file
 0x80 - Directory (anything with the highest bit set)
 Rest reserved
 

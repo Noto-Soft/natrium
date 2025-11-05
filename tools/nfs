@@ -9,6 +9,7 @@ ROOT_DIR_BLOCKS = 4               # root directory uses blocks 2-5 (4 blocks)
 MAX_DIR_BLOCKS_TO_READ = 8        # safe cap when reading directories
 ROOT_DIR_MAX_ENTRIES = 127         # max entries in root dir
 ATTR_FILE = 0x00
+ATTR_SYSTEM = 0x01
 ATTR_DIR = 0x80
 SUPERBLOCK_NEXT_BLOCK_OFFSET = 17  # offset of next free block word in superblock
 
@@ -159,7 +160,7 @@ class NatriumFS:
         return start_block
 
     # ---- File allocation ----
-    def add_file(self, file_path, target_name=None, parent_block=2):
+    def add_file(self, file_path, target_name=None, parent_block=2, system=False):
         if target_name is None:
             target_name = os.path.basename(file_path)
         with open(file_path, 'rb') as f:
@@ -200,7 +201,7 @@ class NatriumFS:
         entry[OFF_NAME:OFF_NAME + 16] = target_name.ljust(16).encode('ascii')[:16]
         entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
         entry[OFF_NUM_BLOCKS] = num_blocks
-        entry[OFF_ATTR] = ATTR_FILE
+        entry[OFF_ATTR] = ATTR_FILE | (ATTR_SYSTEM if system else 0)
         entry[OFF_PADDING:OFF_PADDING + 2] = struct.pack('<H', padding)
         entry[22:32] = b'\x00' * 10
 
@@ -289,6 +290,7 @@ def main():
     add.add_argument("file", help="Host file to add")
     add.add_argument("--name", help="Target filename on disk")
     add.add_argument("--dir", help="Target subdirectory name (optional)")
+    add.add_argument("--sys", help="Sets the file to have the System attribute", action="store_true")
 
     mkdir_cmd = subparsers.add_parser("mkdir", help="Create a subdirectory in root")
     mkdir_cmd.add_argument("name", help="Subdirectory name")
@@ -326,7 +328,7 @@ def main():
                 if not block:
                     raise FileNotFoundError(f"Subdirectory '{args.dir}' not found")
                 parent_block = block
-            start = fs.add_file(args.file, args.name, parent_block)
+            start = fs.add_file(args.file, args.name, parent_block, args.sys)
             print(f"Added '{args.file}' as '{args.name or os.path.basename(args.file)}' at block {start}")
 
         elif args.command == "list":
