@@ -306,8 +306,12 @@ put_char:
     push es
     cmp al, 0xa
     je .newline
+    cmp al, 0xd
+    je .carriage_return
     cmp al, 0x20
     je .space
+    cmp al, 0x8
+    je .backspace
     mov ah, bl
     push ax
     mov ax, 0xb800
@@ -328,21 +332,33 @@ put_char:
     cmp ch, 25
     jnae .c1
     call scroll_screen
+    dec ch
 .c1:
     mov [cs:cursor_position], cx
+.c2:
     pop es
     pop cx
     pop ax
     ret
 .newline:
-    mov ch, byte [cs:cursor_position+1]
+    mov cx, [cs:cursor_position]
     inc ch
     xor cl, cl
     jmp .check_cursor_stuff2
+.carriage_return:
+    mov cx, [cs:cursor_position]
+    xor cl, cl
+    jmp .check_cursor_stuff
 .space:
     mov cx, [cs:cursor_position]
     inc cl
     jmp .check_cursor_stuff
+.backspace:
+    mov cx, [cs:cursor_position]
+    test cl, cl
+    jz .c2
+    dec cl
+    jmp .c1
 
 putc:
     call put_char

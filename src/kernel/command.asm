@@ -13,35 +13,297 @@ start:
     mov [directory_block], 0
 
 main:
-    xor ah, ah
+    mov ah, 0x1
+    mov al, 0xa
     mov bl, 0x7
-    lea si, [msg]
     int 0x21
 
-    lea si, [directory_of_root]
+prompt:
+    call prompt_message
+    lea di, [input_buffer]
+    mov byte [di], 0
+.loop:
+    xor ah, ah
+    int 0x16
+    cmp al, 0xd
+    je parse_prompt
+    cmp al, 0x8
+    je .backspace
+    cmp di, input_buffer+MAX_INPUT_SIZE
+    je .loop
+    mov ah, 0x1
+    int 0x21
+    mov [di], al
+    mov byte [di+1], 0
+    inc di
+    jmp .loop
+.backspace:
+    cmp di, input_buffer
+    je .loop
+    dec di
+    mov byte [di], 0
+    mov ah, 0x1
+    int 0x21
+    mov al, 0xff
+    int 0x21
+    mov al, 0x8
+    int 0x21
+    jmp .loop
+
+parse_prompt:
+    mov ah, 0x1
+    mov al, 0xa
+    int 0x21
+
+    mov al, [input_buffer]
+    test al, al
+    jz prompt
+
+.check_dir:
+    lea si, [str_dir]
+    lea di, [input_buffer]
+    mov cx, 3
+    repe cmpsb
+    jne .not_dir
+    mov al, [di]
+    cmp al, 0x20
+    je .dir
+    test al, al
+    jz .dir
+    jmp .not_dir
+.dir:
+    xor ah, ah
+    lea si, [directory_of]
+    int 0x21
+
+    call cwd_message
+
+    mov ah, 0x1
+    mov al, 0xa
+    int 0x21
+    mov al, " "
     int 0x21
 
     call dir
 
-    lea si, [directory_of_system]
+    mov al, 0xd
     int 0x21
 
-    xor ax, ax
-    mov dl, [drive]
-    lea si, [folder_system]
-    int 0x24
-    test cl, cl
-    jz exit
-    test ch, 0x80
-    jz exit
+    jmp prompt
+.not_dir:
+.check_cd:
+    lea si, [str_cd]
+    lea di, [input_buffer]
+    mov cx, 2
+    repe cmpsb
+    jne .not_cd
+.maybe_cd:
+    call parse_cd
+    cmp ax, 1
+    je .not_cd
+    jmp prompt
+.not_cd:
+.check_cls:
+    lea si, [str_cls]
+    lea di, [input_buffer]
+    mov cx, 3
+    repe cmpsb
+    jne .not_cls
+    mov al, [input_buffer+3]
+    test al, al
+    jz .cls
+    cmp al, " "
+    je .cls
+    jmp .not_cls
+.cls:
+    mov ah, 0xa
+    int 0x21
+    mov ah, 0x5
+    xor cx, cx
+    int 0x21
+    jmp prompt
+.not_cls:
+    xor ah, ah
+    lea si, [error_not_command]
+    int 0x21
 
-    mov [directory_block], ax
-    mov [directory_size], cl
-
-    call dir
+    jmp prompt
 
 exit:
     retf
+
+parse_cd:
+    mov ax, 0
+    pusha
+    mov al, [input_buffer+2]
+    test al, al
+    jz .cd_fail_no_argument
+    cmp al, " "
+    je .actually_parse
+    popa
+    mov ax, 1
+    ret
+.actually_parse:
+    lea si, [input_buffer+3]
+.find_next_token:
+    lodsb
+    test al, al
+    jz .find_next_token
+    cmp al, " "
+    je .find_next_token
+    cmp al, "/"
+    jne .not_root
+    mov al, [si]
+    test al, al
+    jz .root
+    cmp al, " "
+    je .root
+.not_root:
+    dec si
+    lea di, [filename_buffer]
+    mov cx, 16
+.move_filename_loop:
+    lodsb
+    test al, al
+    jz .set_space
+    cmp al, " "
+    je .set_space
+    stosb
+    loop .move_filename_loop
+.move_filename_loop_after:
+    xor ax, ax
+    mov dl, [drive]
+    lea si, [filename_buffer]
+    int 0x24
+    test cl, cl
+    jz .cd_fail_lack
+    test ch, 0x80
+    jz .cd_fail_type
+    mov [directory_block], ax
+    mov [directory_size], cl
+    lea di, [current_working_directory]
+    mov cx, 16
+.set_cwd_loop:
+    lodsb
+    test al, al
+    jz .set_zero
+    cmp al, " "
+    je .set_zero
+    stosb
+    loop .set_cwd_loop
+.set_cwd_loop_after:
+    popa
+    ret
+.set_space:
+    mov al, " "
+    stosb
+    loop .move_filename_loop
+    jmp .move_filename_loop_after
+.set_zero:
+    xor al, al
+    stosb
+    loop .set_cwd_loop
+    jmp .set_cwd_loop_after
+.root:
+    mov [directory_block], 0
+    mov byte [current_working_directory], 0
+    popa
+    ret
+.cd_fail_format:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_cd_format]
+    int 0x21
+    popa
+    ret
+.cd_fail_lack:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_not_exist]
+    int 0x21
+    popa
+    ret
+.cd_fail_type:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_not_directory]
+    int 0x21
+    popa
+    ret
+.cd_fail_no_argument:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_no_argument]
+    int 0x21
+    popa
+    ret
+
+terminate_cwd:
+    pusha
+    lea si, [current_working_directory]
+.loop_through:
+    lodsb
+    test al, al
+    jz .done
+    cmp al, " "
+    jne .loop_through
+    mov byte [si-1], 0
+.done:
+    mov byte [current_working_directory+16], 0
+    popa
+    ret
+
+prompt_message:
+    pusha
+    mov ah, 0x1
+    mov al, [drive]
+    add al, "A"
+    mov bl, 0x7
+    int 0x21
+    mov al, ":"
+    int 0x21
+    mov al, "/"
+    int 0x21
+    call terminate_cwd
+    mov al, [current_working_directory]
+    test al, al
+    jz .arrow
+    dec ah
+    lea si, [current_working_directory]
+    int 0x21
+    inc ah
+    mov al, "/"
+    int 0x21
+.arrow:
+    mov al, ">"
+    int 0x21
+    popa
+    ret
+
+cwd_message:
+    pusha
+    mov ah, 0x1
+    mov al, [drive]
+    add al, "A"
+    mov bl, 0x7
+    int 0x21
+    mov al, ":"
+    int 0x21
+    mov al, "/"
+    int 0x21
+    call terminate_cwd
+    mov al, [current_working_directory]
+    test al, al
+    jz .ret
+    dec ah
+    lea si, [current_working_directory]
+    int 0x21
+    inc ah
+    mov al, "/"
+    int 0x21
+.ret:
+    popa
+    ret
 
 read_directory:
     pusha
@@ -158,20 +420,34 @@ dir:
     popa
     ret
 
-msg db endl, "an actual command.sys later...", endl, 0
-
-directory_of_root db endl, "Directory of A:/", endl, " ", 0
-directory_of_system db endl, "Directory of A:/System/", endl, " ", 0
+directory_of db "Directory of ", 0
 
 str_file db "FILE", endl, " ", 0
 str_system db "SYSTEM FILE", endl, " ", 0
 str_directory db "DIRECTORY", endl, " ", 0
+
+str_cd db "cd", 0
+str_cls db "cls", 0
+str_dir db "dir", 0
+
+error_cd_format db "Directory format must be like so: DirName (or / for root)", endl, 0
+error_not_exist db "Directory does not exist.", endl, 0
+error_not_directory db "Not a directory!", endl, 0
+error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
+error_not_command db "Not a command!", endl, 0
 
 folder_system db "System          "
 
 drive db ?
 
 directory_block dw ?
-directory_size db ? 
+directory_size db ?
+
+current_working_directory db 17 dup(?)
+
+input_buffer db 33 dup(?)
+MAX_INPUT_SIZE = 32
+
+filename_buffer db 16 dup(?)
 
 buffer rb 8192
