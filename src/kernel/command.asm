@@ -142,7 +142,7 @@ parse_prompt:
     jmp .not_help
 .help:
     xor ah, ah
-    lea si, [help_msg]
+    lea si, [msg_help]
     int 0x21
     jmp prompt
 .not_help:
@@ -169,6 +169,20 @@ parse_prompt:
     pop ds
     jmp prompt
 .not_type:
+.check_drive:
+    mov al, [input_buffer+1]
+    cmp al, ":"
+    jne .not_drive
+    mov al, [input_buffer+2]
+    test al, al
+    jz .drive
+    cmp al, " "
+    je .drive
+    jmp .not_drive
+.drive:
+    call set_drive
+    jmp prompt
+.not_drive:
     lea si, [input_buffer]
     call move_filename
 
@@ -603,6 +617,76 @@ dir:
     popa
     ret
 
+set_drive:
+    pusha
+    xor ah, ah
+    lea si, [msg_insert_diskette]
+    int 0x21
+    int 0x16
+    mov al, [input_buffer]
+    cmp al, "A"
+    je .a
+    cmp al, "a"
+    je .a
+    cmp al, "B"
+    je .b
+    cmp al, "b"
+    je .b
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_invalid_drive]
+    int 0x21
+    popa
+    ret
+.a:
+    xor dl, dl
+    jmp .set_drive_stuff
+.b:
+    mov dl, 1
+.set_drive_stuff:
+    pusha
+    push es
+    mov ah, 0x8
+    int 0x13
+    jc .missing
+    pop es
+    popa
+    mov [drive], dl
+    mov [directory_block], 0
+    lea di, [current_working_directory]
+    mov cx, 8
+    xor ax, ax
+    rep stosw
+
+    xor ah, ah
+    lea si, [directory_of]
+    int 0x21
+
+    call cwd_message
+
+    mov ah, 0x1
+    mov al, 0xa
+    int 0x21
+    mov al, " "
+    int 0x21
+
+    call dir
+
+    mov al, 0xd
+    int 0x21
+
+    popa
+    ret
+.missing:
+    pop es
+    popa
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_drive_missing]
+    int 0x21
+    popa
+    ret
+
 directory_of db "Directory of ", 0
 
 str_file db "FILE", endl, " ", 0
@@ -615,7 +699,10 @@ str_dir db "dir", 0
 str_help db "help", 0
 str_type db "type", 0
 
-help_msg db "List of commands:", endl, \
+msg_insert_diskette db "Make sure the diskette is inserted to the chosen drive, then press any key.", endl, 0
+msg_help db "List of commands:", endl, \
+            "a:", endl, \
+            "b:", endl, \
             "cd <directory name>", endl, \
             "cls", endl, \
             "dir", endl, \
@@ -631,6 +718,8 @@ error_not_directory db "That is a file!", endl, 0
 error_dir_not_exist db "Directory specified does not exist.", endl, 0
 error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
 error_not_command db "Not a command, nor an executable file.", endl, 0
+error_invalid_drive db "Invalid drive letter/number! (Accepted: A/a, B/b)", endl, 0
+error_drive_missing db "Drive not inserted.", endl, 0
 
 folder_system db "System          "
 

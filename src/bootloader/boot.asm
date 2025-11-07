@@ -28,6 +28,14 @@ start:
     mov byte [heads], dh
     mov byte [heads + 1], 0
 
+    lea si, [yes]
+    call puts
+
+    mov ah, 0x86
+    mov cx, 0xf
+    mov dx, 0x4240
+    int 0x15
+
 main:
     mov ax, 1
     mov cl, 1
@@ -294,6 +302,8 @@ error_kernel_not_found db "File 'kernel.sys' missing", endl, 0
 error_wrong_filesystem db "Incorrect fs version", endl, 0
 
 kernel_sys db "kernel.sys      "
+
+yes db "Lithium Bootloader 1.0"
 
 drive db ?
 sectors_per_track dw ?
