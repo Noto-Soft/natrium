@@ -12,13 +12,17 @@ start:
 
     mov [directory_block], 0
 
-main:
     mov ah, 0x1
     mov al, 0xa
     mov bl, 0x7
     int 0x21
 
 prompt:
+    xor ax, ax
+    mov cx, 16
+    lea di, [input_buffer]
+    rep stosw
+
     call prompt_message
     lea di, [input_buffer]
     mov byte [di], 0
@@ -53,6 +57,7 @@ prompt:
 parse_prompt:
     mov ah, 0x1
     mov al, 0xa
+    mov bl, 0x7
     int 0x21
 
     mov al, [input_buffer]
@@ -123,14 +128,108 @@ parse_prompt:
     int 0x21
     jmp prompt
 .not_cls:
+.check_help:
+    lea si, [str_help]
+    lea di, [input_buffer]
+    mov cx, 4
+    repe cmpsb
+    jne .not_help
+    mov al, [input_buffer+4]
+    test al, al
+    jz .help
+    cmp al, " "
+    je .help
+    jmp .not_help
+.help:
     xor ah, ah
+    lea si, [help_msg]
+    int 0x21
+    jmp prompt
+.not_help:
+.check_type:
+    lea si, [str_type]
+    lea di, [input_buffer]
+    mov cx, 4
+    repe cmpsb
+    jne .not_type
+.maybe_type:
+    call parse_type_or_exec
+    cmp ax, 1
+    je .not_type
+    cmp ax, 2
+    je prompt
+.type:
+    push ds
+    lea ax, [0x4000]
+    mov ds, ax
+    xor ah, ah
+    mov bl, 0x7
+    xor si, si
+    int 0x21
+    pop ds
+    jmp prompt
+.not_type:
+    lea si, [input_buffer]
+    call move_filename
+
+    mov ax, [directory_block]
+    mov cl, [directory_size]
+    mov dl, [drive]
+    lea si, [filename_buffer]
+    int 0x24
+    test cl, cl
+    jz .failure
+    test ch, 0x80
+    jnz .failure
+    push es
+    lea bx, [0x4000]
+    mov es, bx
+    xor bx, bx
+    int 0x22
+    pop es
+
+    push cs
+    push word return_point
+    push word 0x4000
+    push word 0
+    retf
+
+.failure:
+    xor ah, ah
+    mov bl, 0x4
     lea si, [error_not_command]
     int 0x21
+    mov bl, 0x7
 
     jmp prompt
 
-exit:
-    retf
+return_point:
+    mov ax, cs
+    mov ds, ax
+    mov es, ax
+
+    jmp prompt
+
+move_filename:
+    pusha
+    lea di, [filename_buffer]
+    mov cx, 16
+.move_filename_loop:
+    lodsb
+    test al, al
+    jz .set_space
+    cmp al, " "
+    je .set_space
+    stosb
+    loop .move_filename_loop
+.move_filename_loop_after:
+    popa
+    ret
+.set_space:
+    mov al, " "
+    stosb
+    loop .move_filename_loop
+    jmp .move_filename_loop_after
 
 parse_cd:
     mov ax, 0
@@ -215,13 +314,15 @@ parse_cd:
     lea si, [error_cd_format]
     int 0x21
     popa
+    mov ax, 2
     ret
 .cd_fail_lack:
     xor ah, ah
     mov bl, 0x4
-    lea si, [error_not_exist]
+    lea si, [error_dir_not_exist]
     int 0x21
     popa
+    mov ax, 2
     ret
 .cd_fail_type:
     xor ah, ah
@@ -229,6 +330,7 @@ parse_cd:
     lea si, [error_not_directory]
     int 0x21
     popa
+    mov ax, 2
     ret
 .cd_fail_no_argument:
     xor ah, ah
@@ -236,6 +338,87 @@ parse_cd:
     lea si, [error_no_argument]
     int 0x21
     popa
+    mov ax, 2
+    ret
+
+parse_type_or_exec:
+    mov ax, 0
+    pusha
+    mov al, [input_buffer+4]
+    test al, al
+    jz .fail_no_argument
+    cmp al, " "
+    je .actually_parse
+    popa
+    mov ax, 1
+    ret
+.actually_parse:
+    lea si, [input_buffer]
+.find_space:
+    lodsb
+    test al, al
+    jz .fail_no_argument
+    cmp al, " "
+    jne .find_space
+    lea di, [filename_buffer]
+    mov cx, 16
+.move_filename_loop:
+    lodsb
+    test al, al
+    jz .set_space
+    cmp al, " "
+    je .set_space
+    stosb
+    loop .move_filename_loop
+.move_filename_loop_after:
+    mov ax, [directory_block]
+    mov cl, [directory_size]
+    mov dl, [drive]
+    lea si, [filename_buffer]
+    int 0x24
+    test cl, cl
+    jz .fail_lack
+    test ch, 0x80
+    jnz .fail_type
+    push es
+    lea bx, [0x4000]
+    mov es, bx
+    xor bx, bx
+    int 0x22
+    pop es
+    mov ah, 0x1
+    mov al, 0xa
+    int 0x21
+    popa
+    ret
+.set_space:
+    mov al, " "
+    stosb
+    loop .move_filename_loop
+    jmp .move_filename_loop_after
+.fail_lack:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_not_exist]
+    int 0x21
+    popa
+    mov ax, 2
+    ret
+.fail_type:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_not_file]
+    int 0x21
+    popa
+    mov ax, 2
+    ret
+.fail_no_argument:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_no_argument]
+    int 0x21
+    popa
+    mov ax, 2
     ret
 
 terminate_cwd:
@@ -429,12 +612,18 @@ str_directory db "DIRECTORY", endl, " ", 0
 str_cd db "cd", 0
 str_cls db "cls", 0
 str_dir db "dir", 0
+str_help db "help", 0
+str_type db "type", 0
+
+help_msg db "List of commands:", endl, "cd <directory name>", endl, "cls", endl, "dir", endl, "help", endl, "type <file name>", endl, "<executable file name>", endl, 0
 
 error_cd_format db "Directory format must be like so: DirName (or / for root)", endl, 0
-error_not_exist db "Directory does not exist.", endl, 0
+error_not_file db "Not a file!", endl, 0
+error_not_exist db "File does not exist.", endl, 0
 error_not_directory db "Not a directory!", endl, 0
+error_dir_not_exist db "Directory does not exist.", endl, 0
 error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
-error_not_command db "Not a command!", endl, 0
+error_not_command db "Not a command, nor an executable file.", endl, 0
 
 folder_system db "System          "
 
