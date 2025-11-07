@@ -615,13 +615,20 @@ str_dir db "dir", 0
 str_help db "help", 0
 str_type db "type", 0
 
-help_msg db "List of commands:", endl, "cd <directory name>", endl, "cls", endl, "dir", endl, "help", endl, "type <file name>", endl, "<executable file name>", endl, 0
+help_msg db "List of commands:", endl, \
+            "cd <directory name>", endl, \
+            "cls", endl, \
+            "dir", endl, \
+            "help", endl, \
+            "type <file name>", endl, \
+            "<executable file name>", endl, \
+            0
 
 error_cd_format db "Directory format must be like so: DirName (or / for root)", endl, 0
-error_not_file db "Not a file!", endl, 0
-error_not_exist db "File does not exist.", endl, 0
-error_not_directory db "Not a directory!", endl, 0
-error_dir_not_exist db "Directory does not exist.", endl, 0
+error_not_file db "That is a directory!", endl, 0
+error_not_exist db "File specified does not exist.", endl, 0
+error_not_directory db "That is a file!", endl, 0
+error_dir_not_exist db "Directory specified does not exist.", endl, 0
 error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
 error_not_command db "Not a command, nor an executable file.", endl, 0
 
