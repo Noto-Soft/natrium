@@ -1,20 +1,26 @@
 fasm src/bootloader/boot.asm build/boot.bin
-fasm src/kernel/kernel.asm build/kernel.bin
-fasm src/kernel/command.asm build/command.bin
-fasm src/other/hello.asm build/hello.bin
+fasm src/kernel/kernel.asm build/kernel.sys
+fasm src/kernel/command.asm build/command.sys
+fasm src/kernel/unreal.asm build/unreal.sys
+fasm src/other/hello.asm build/hello.exe
 
-./tools/nfs natrium.img create 1440 --volume NATRIUM
-./tools/nfs natrium.img add build/kernel.bin --sys --name kernel.sys
-./tools/nfs natrium.img mkdir System
-./tools/nfs natrium.img add build/command.bin --dir System --sys --name command.sys
-./tools/nfs natrium.img add assets/logo.txt --dir System --sys
-./tools/nfs natrium.img add assets/boot.txt --dir System --sys
-./tools/nfs natrium.img mkdir Documents
-./tools/nfs natrium.img add assets/reminder.txt --dir Documents
+mkdir natrium/
+mkdir natrium/System/
+mkdir natrium/Documents/
+cp build/kernel.sys natrium/
+cp build/command.sys natrium/System/
+cp build/unreal.sys natrium/System/
+cp assets/logo.txt natrium/System/logo.sys.txt
+cp assets/boot.txt natrium/System/boot.sys.txt
+cp assets/reminder.txt natrium/Documents/
+./tools/nfs natrium.img pack --size-kb 1440 --volume NATRIUM natrium
+rm -rf natrium
 
-./tools/nfs disk2.img create 1440 --volume STUFF
-./tools/nfs disk2.img add build/hello.bin --name hello.exe
-./tools/nfs disk2.img add assets/yep.txt
+mkdir disk2
+cp build/hello.bin disk2/hello.exe
+cp assets/yep.txt disk2/
+./tools/nfs disk2.img pack --size-kb 1440 --volume STUFF disk2
+rm -rf disk2
 
 dd if=build/boot.bin of=natrium.img conv=notrunc
 

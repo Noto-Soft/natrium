@@ -61,12 +61,14 @@ main:
     jz error_2
     dec cl
     lea si, [kernel_sys]
+    push di
     push cx
     mov cx, 16
     repe cmpsb
     pop cx
+    pop di
     pushf
-    add di, 16
+    add di, 32
     popf
     jne .find_kernel_loop
     mov al, byte [di-32+19]
@@ -303,7 +305,7 @@ error_wrong_filesystem db "Incorrect fs version", endl, 0
 
 kernel_sys db "kernel.sys      "
 
-yes db "Lithium Bootloader 1.0"
+yes db "Lithium Bootloader 1.1", endl, 0
 
 drive db ?
 sectors_per_track dw ?
@@ -312,4 +314,4 @@ heads dw ?
 db 510-($-$$) dup(0)
 dw 0xaa55
 
-label buffer
+label buffer 

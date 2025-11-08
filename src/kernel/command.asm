@@ -192,9 +192,37 @@ parse_prompt:
     lea si, [filename_buffer]
     int 0x24
     test cl, cl
+    jz .check_exe_autocomplete
+    test ch, 0x80
+    jnz .check_exe_autocomplete
+    jmp .gotten
+.check_exe_autocomplete:
+    mov cx, 16
+    lea si, [filename_buffer]
+.find_end_loop:
+    lodsb
+    cmp al, " "
+    je .maybe_found_end
+    loop .find_end_loop
+    jmp .failure
+.maybe_found_end:
+    cmp cx, 12
+    jna .found_end
+    loop .find_end_loop
+.found_end:
+    dec si
+    mov word [si], ".e"
+    mov word [si+2], "xe"
+    mov ax, [directory_block]
+    mov cl, [directory_size]
+    mov dl, [drive]
+    lea si, [filename_buffer]
+    int 0x24
+    test cl, cl
     jz .failure
     test ch, 0x80
     jnz .failure
+.gotten:
     push es
     lea bx, [0x4000]
     mov es, bx
@@ -273,17 +301,7 @@ parse_cd:
     je .root
 .not_root:
     dec si
-    lea di, [filename_buffer]
-    mov cx, 16
-.move_filename_loop:
-    lodsb
-    test al, al
-    jz .set_space
-    cmp al, " "
-    je .set_space
-    stosb
-    loop .move_filename_loop
-.move_filename_loop_after:
+    call move_filename
     xor ax, ax
     mov dl, [drive]
     lea si, [filename_buffer]
@@ -307,11 +325,6 @@ parse_cd:
 .set_cwd_loop_after:
     popa
     ret
-.set_space:
-    mov al, " "
-    stosb
-    loop .move_filename_loop
-    jmp .move_filename_loop_after
 .set_zero:
     xor al, al
     stosb
@@ -374,17 +387,7 @@ parse_type_or_exec:
     jz .fail_no_argument
     cmp al, " "
     jne .find_space
-    lea di, [filename_buffer]
-    mov cx, 16
-.move_filename_loop:
-    lodsb
-    test al, al
-    jz .set_space
-    cmp al, " "
-    je .set_space
-    stosb
-    loop .move_filename_loop
-.move_filename_loop_after:
+    call move_filename
     mov ax, [directory_block]
     mov cl, [directory_size]
     mov dl, [drive]
@@ -405,11 +408,6 @@ parse_type_or_exec:
     int 0x21
     popa
     ret
-.set_space:
-    mov al, " "
-    stosb
-    loop .move_filename_loop
-    jmp .move_filename_loop_after
 .fail_lack:
     xor ah, ah
     mov bl, 0x4
@@ -699,7 +697,8 @@ str_dir db "dir", 0
 str_help db "help", 0
 str_type db "type", 0
 
-msg_insert_diskette db "Make sure the diskette is inserted to the chosen drive, then press any key.", endl, 0
+msg_insert_diskette db "Make sure the diskette is inserted to the chosen drive, ", \
+                        "then press any key.", endl, 0
 msg_help db "List of commands:", endl, \
             "a:", endl, \
             "b:", endl, \

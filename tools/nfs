@@ -2,6 +2,7 @@
 import os
 import struct
 import argparse
+import math
 
 # NatriumFS v1 constants
 BLOCK_SIZE = 1024                 # 2 * 512
@@ -19,6 +20,13 @@ OFF_START = 16
 OFF_NUM_BLOCKS = 18
 OFF_ATTR = 19
 OFF_PADDING = 20
+
+# commonly-considered plaintext extensions -> encode to cp437
+TEXT_EXTS = {
+    ".txt", ".ans", ".nfo", ".cfg", ".ini", ".bat", ".cmd", ".md",
+    ".asm", ".c", ".h", ".cpp", ".py", ".json", ".xml", ".csv", ".log"
+}
+
 
 class NatriumFS:
     def __init__(self, path):
@@ -165,7 +173,11 @@ class NatriumFS:
             target_name = os.path.basename(file_path)
         with open(file_path, 'rb') as f:
             data = f.read()
-        file_size = len(data)
+        return self.add_file_bytes(target_name, data, parent_block, system)
+
+    def add_file_bytes(self, target_name, data_bytes, parent_block=2, system=False):
+        """Add a file to the FS using bytes in memory (does same allocation as add_file)."""
+        file_size = len(data_bytes)
         num_blocks = (file_size + BLOCK_SIZE - 1) // BLOCK_SIZE
         if num_blocks == 0:
             num_blocks = 1
@@ -186,7 +198,7 @@ class NatriumFS:
 
         # write file data
         for i in range(num_blocks):
-            chunk = data[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
+            chunk = data_bytes[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
             self._write_block(start_block + i, chunk)
 
         # compute padding
@@ -276,6 +288,107 @@ class NatriumFS:
             except Exception as ex:
                 print(f"[DECODE-ERROR] {e['name']}: {ex}")
 
+    # ---- Packing helper: create a disk from a folder ----
+    def pack_from_folder(self, source_dir, size_kb=None, volume_name="NATRIUM"):
+        """
+        Build a disk image from a folder structure.
+        - top-level files -> root
+        - top-level directories -> subdirectories (only one level deep)
+        - ignores deeper nested directories
+        - encodes plaintext files to cp437 for storage (based on extension)
+        - automatically marks .sys files and removes .sys before extension if present
+        """
+        if not os.path.isdir(source_dir):
+            raise NotADirectoryError(source_dir)
+
+        # Helper for system file detection and renaming
+        def _infer_system_file_and_name(name):
+            lower = name.lower()
+            system = False
+            if lower.endswith(".sys"):
+                system = True
+                store_name = name
+            elif ".sys." in lower:
+                system = True
+                idx = lower.rindex(".sys.")
+                store_name = name[:idx] + name[idx+4:]
+            else:
+                store_name = name
+            return store_name[:16], system
+
+        # gather files
+        top_files = []
+        top_dirs = {}
+        for entry in sorted(os.listdir(source_dir)):
+            full = os.path.join(source_dir, entry)
+            if os.path.isfile(full):
+                top_files.append((entry, full))
+            elif os.path.isdir(full):
+                files = []
+                for f in sorted(os.listdir(full)):
+                    fp = os.path.join(full, f)
+                    if os.path.isfile(fp):
+                        files.append((f, fp))
+                top_dirs[entry] = files
+
+        # compute minimal size if not provided
+        if size_kb is None:
+            total_bytes = BLOCK_SIZE * (1 + 1 + ROOT_DIR_BLOCKS)
+            total_bytes += len(top_dirs) * (BLOCK_SIZE * ROOT_DIR_BLOCKS)
+            for name, fp in top_files:
+                s = os.path.getsize(fp)
+                blocks = max(1, (s + BLOCK_SIZE - 1) // BLOCK_SIZE)
+                total_bytes += blocks * BLOCK_SIZE
+            for dname, files in top_dirs.items():
+                for name, fp in files:
+                    s = os.path.getsize(fp)
+                    blocks = max(1, (s + BLOCK_SIZE - 1) // BLOCK_SIZE)
+                    total_bytes += blocks * BLOCK_SIZE
+            total_bytes += BLOCK_SIZE * 10
+            size_kb = math.ceil(total_bytes / 1024)
+
+        # create image and populate
+        self.create(size_kb, volume_name)
+        self.open('r+b')
+        try:
+            dir_map = {}  # name -> start_block
+            for dname in sorted(top_dirs.keys()):
+                dname_trunc = dname[:16]
+                start = self.mkdir(dname_trunc)
+                dir_map[dname] = start
+                print(f"[MKDIR] {dname} -> block {start}")
+
+            # add top-level files
+            for name, fp in top_files:
+                stored_name, is_system = _infer_system_file_and_name(name)
+                ext = os.path.splitext(name)[1].lower()
+                if ext in TEXT_EXTS:
+                    with open(fp, 'r', encoding='cp437', errors='replace') as f:
+                        txt = f.read()
+                    data = txt.encode('cp437', errors='replace')
+                    start = self.add_file_bytes(stored_name, data, parent_block=2, system=is_system)
+                else:
+                    start = self.add_file(fp, stored_name, parent_block=2, system=is_system)
+                print(f"[ADD] root: {name} -> block {start} (system={is_system})")
+
+            # add files into subdirectories
+            for dname, files in sorted(top_dirs.items()):
+                parent_block = dir_map[dname]
+                for name, fp in files:
+                    stored_name, is_system = _infer_system_file_and_name(name)
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext in TEXT_EXTS:
+                        with open(fp, 'r', encoding='cp437', errors='replace') as f:
+                            txt = f.read()
+                        data = txt.encode('cp437', errors='replace')
+                        start = self.add_file_bytes(stored_name, data, parent_block=parent_block, system=is_system)
+                    else:
+                        start = self.add_file(fp, stored_name, parent_block=parent_block, system=is_system)
+                    print(f"[ADD] {dname}/{name} -> block {start} (system={is_system})")
+        finally:
+            self.close()
+
+
 # ---- CLI ----
 def main():
     parser = argparse.ArgumentParser(description="NatriumFS v1 utility")
@@ -306,13 +419,22 @@ def main():
     extractall = subparsers.add_parser("extractall", help="Extract entire disk to host")
     extractall.add_argument("outdir", help="Destination directory on host")
 
-    args = parser.parse_args()
+    pack = subparsers.add_parser("pack", help="Pack a folder into a NatriumFS disk image")
+    pack.add_argument("source", help="Source folder to pack (top-level files + one-level subdirs)")
+    pack.add_argument("--size-kb", type=int, help="Optional disk size in KB. If omitted, auto-calculated.")
+    pack.add_argument("--volume", default="NATRIUM", help="Volume name for created image")
 
+    args = parser.parse_args()
     fs = NatriumFS(args.disk)
 
     if args.command == "create":
         fs.create(args.size_kb, args.volume)
         print(f"Created NatriumFS {args.size_kb}KB disk: {args.disk}")
+        return
+
+    if args.command == "pack":
+        fs.pack_from_folder(args.source, size_kb=args.size_kb, volume_name=args.volume)
+        print(f"Packed folder '{args.source}' into disk image '{args.disk}' (size_kb={args.size_kb or 'auto'})")
         return
 
     fs.open('r+b')
@@ -360,6 +482,7 @@ def main():
 
     finally:
         fs.close()
+
 
 if __name__ == "__main__":
     main()

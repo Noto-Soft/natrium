@@ -120,6 +120,31 @@ main:
     mov ax, [folder_system_block]
     mov cl, [folder_system_size]
     mov dl, [drive]
+    lea si, [file_unreal_sys]
+    call get_file
+    test cl, cl
+    jz .failure
+    test ch, 0x80
+    jnz .failure
+
+    push ds
+    push es
+    lea bx, [0x2000]
+    mov es, bx
+    xor bx, bx
+    call read_blocks
+    push cs
+    push word .return_point_unreal_sys
+    push es
+    push bx
+    retf
+.return_point_unreal_sys:
+    pop es
+    pop ds
+    
+    mov ax, [folder_system_block]
+    mov cl, [folder_system_size]
+    mov dl, [drive]
     lea si, [file_command_sys]
     call get_file
     test cl, cl
@@ -127,18 +152,20 @@ main:
     test ch, 0x80
     jnz .failure
 
+    push ds
     push es
     lea bx, [0x2000]
     mov es, bx
     xor bx, bx
     call read_blocks
     push cs
-    push word .return_point
+    push word .return_point_command_sys
     push es
     push bx
     retf
-.return_point:
+.return_point_command_sys:
     pop es
+    pop ds
 halt:
     cli
     hlt
@@ -182,7 +209,10 @@ int21:
     call word [cs:call_value]
     iret
 .call_table:
-    dw puts, putc, poke_char, puts_length, putd, set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, clear_screen, scroll_screen
+    dw puts, putc, poke_char, puts_length, putd, \
+        set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, \
+        clear_screen, scroll_screen, \
+        putc_escaped
     dw (256-($-.call_table))/2 dup(nothing)
 
 int22:
@@ -300,10 +330,13 @@ poke_char:
 
 ; al - char
 ; bl - formatting byte
+; carry flag - character is escaped? (flag is preserved throughout calls)
 put_char:
     push ax
     push cx
     push es
+    pushf
+    jc .ignore_escaped_character
     cmp al, 0xa
     je .newline
     cmp al, 0xd
@@ -312,6 +345,7 @@ put_char:
     je .space
     cmp al, 0x8
     je .backspace
+.ignore_escaped_character:
     mov ah, bl
     push ax
     mov ax, 0xb800
@@ -336,6 +370,7 @@ put_char:
 .c1:
     mov [cs:cursor_position], cx
 .c2:
+    popf
     pop es
     pop cx
     pop ax
@@ -360,23 +395,47 @@ put_char:
     dec cl
     jmp .c1
 
+; al - char
+; bl - formatting
 putc:
+    pushf
+    clc
     call put_char
     call update_cursor_position
+    popf
+    ret
+
+putc_escaped:
+    pushf
+    stc
+    call put_char
+    call update_cursor_position
+    popf
     ret
 
 puts:
     push ax
     push si
+    pushf
+    clc
     cld
 .loop:
     lodsb
     test al, al
     jz .done
+    cmp al, 0x1
+    je .escape
     call put_char
+    jmp .loop
+.escape:
+    lodsb
+    stc
+    call put_char
+    clc
     jmp .loop
 .done:
     call update_cursor_position
+    popf
     pop si
     pop ax
     ret
@@ -385,13 +444,28 @@ puts_length:
     push ax
     push cx
     push si
+    pushf
+    clc
     cld
 .loop:
     lodsb
+    cmp al, 0x1
+    je .escape
     call put_char
+    loop .loop
+    jmp .done
+.escape:
+    cmp cx, 1
+    je .done
+    lodsb
+    stc
+    call put_char
+    clc
+    add cx, 1
     loop .loop
 .done:
     call update_cursor_position
+    popf
     pop si
     pop cx
     pop ax
@@ -773,6 +847,7 @@ folder_system db "System          "
 file_logo_txt db "logo.txt        "
 file_boot_txt db "boot.txt        "
 file_command_sys db "command.sys     "
+file_unreal_sys db "unreal.sys      "
 
 drive db ?
 sectors_per_track dw ?
