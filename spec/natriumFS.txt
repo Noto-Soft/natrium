@@ -20,7 +20,7 @@ Repeated 32 byte entries until blocks run out
 Root directory will always have 127 max entries
 
 Entry layout:
-16 bytes name, no zero terminator, padded with spaces
+16 bytes name, no zero terminator, padded with spaces, filename itself cannot contain spaces
 Word for file starting block, byte for how many blocks to load, attribute byte
 Word for padding length (how many zeroes added to expand it to a 1kb block). Probably useful for something. You can subtract this from the file size * 1024 to get the actual byte size of the file.
 10 zero bytes for aligning to 32 bytes

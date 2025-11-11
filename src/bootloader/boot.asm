@@ -45,7 +45,7 @@ main:
 
     mov al, byte [buffer+16]
     cmp al, 0x1
-    jne error_1
+    jne bad_fs
 
     mov ax, 2
     mov cl, 4
@@ -58,7 +58,7 @@ main:
     lea di, [buffer+32]
 .find_kernel_loop:
     test cl, cl
-    jz error_2
+    jz file_not_found
     dec cl
     lea si, [kernel_sys]
     push di
@@ -84,12 +84,12 @@ main:
     
     jmp 0x1000:0x0000
 
-error_1:
+bad_fs:
     lea si, [error_wrong_filesystem]
     call puts
     jmp $
 
-error_2:
+file_not_found:
     lea si, [error_kernel_not_found]
     call puts
     jmp $

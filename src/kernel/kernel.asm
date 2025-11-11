@@ -190,7 +190,7 @@ clear_file_loading_space:
     pop ax
     ret
 
-nothing:
+stub:
     ret
 
 int21:
@@ -213,7 +213,7 @@ int21:
         set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, \
         clear_screen, scroll_screen, \
         putc_escaped
-    dw (256-($-.call_table))/2 dup(nothing)
+    dw (256-($-.call_table))/2 dup(stub)
 
 int22:
     call read_blocks
@@ -738,6 +738,11 @@ write_blocks:
     ret
 
 floppy_error:
+    mov ax, cs
+    mov ds, ax
+    mov bl, 0x7
+    lea si, [error_floppy]
+    call puts
     jmp $
 
 ; ax - starting block of directory (will read from root directory if 0)
@@ -765,7 +770,7 @@ get_file:
 
     mov al, byte [cs:buffer+16]
     cmp al, 0x1
-    jne error_1
+    jne bad_fs
 
     pop ax
 
@@ -825,7 +830,7 @@ get_file:
     xor cl, cl
     ret
 
-error_1:
+bad_fs:
     mov ax, cs
     mov ds, ax
     mov bl, 0x7
@@ -835,6 +840,7 @@ error_1:
 
 error_kernel_not_found db "File missing", endl, 0
 error_wrong_filesystem db "Incorrect fs version", endl, 0
+error_floppy db "Floppy error", endl, 0
 
 cursor_shape dw 0x003f
 cursor_position dw 0

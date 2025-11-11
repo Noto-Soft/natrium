@@ -1,4 +1,5 @@
 executables (.exe) files get passed the current working directory name as well as the drive number in bp and dl respectively
 es:si also contains the arguments to the program if any
+if you plan on doing complex parsing of arguments load the arguments into a buffer of length 256 (stop loading when you encounter a zero)
 
 executables are always loaded at the offset 0 in the segment

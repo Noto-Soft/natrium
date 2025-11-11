@@ -19,9 +19,9 @@ start:
 
 prompt:
     xor ax, ax
-    mov cx, 16
+    mov cx, MAX_INPUT_SIZE
     lea di, [input_buffer]
-    rep stosw
+    rep stosb
 
     call prompt_message
     lea di, [input_buffer]
@@ -160,7 +160,7 @@ parse_prompt:
     je prompt
 .type:
     push ds
-    lea ax, [0x4000]
+    lea ax, [0x3000]
     mov ds, ax
     xor ah, ah
     mov bl, 0x7
@@ -224,18 +224,38 @@ parse_prompt:
     jnz .failure
 .gotten:
     push es
-    lea bx, [0x4000]
+    lea bx, [0x8000]
     mov es, bx
     xor bx, bx
     int 0x22
     pop es
 
+    lea si, [input_buffer]
+    xor dl, dl
+.find_args_loop:
+    lodsb
+    test al, al
+    jz .not_found_args
+    cmp al, " "
+    je .maybe_found_args
+    test dl, dl
+    jz .find_args_loop
+    dec si
+    jmp .found_args
+.maybe_found_args:
+    inc dl
+    jmp .find_args_loop
+.not_found_args:
+    xor si, si
+    xor cl, cl
+.found_args:
+    push cs
+    pop es
     push cs
     push word return_point
-    push word 0x4000
+    push word 0x8000
     push word 0
     retf
-
 .failure:
     xor ah, ah
     mov bl, 0x4
@@ -254,10 +274,13 @@ return_point:
 
 move_filename:
     pusha
+    xor dl, dl
     lea di, [filename_buffer]
     mov cx, 16
 .move_filename_loop:
     lodsb
+    test dl, dl
+    jnz .set_space
     test al, al
     jz .set_space
     cmp al, " "
@@ -270,6 +293,7 @@ move_filename:
 .set_space:
     mov al, " "
     stosb
+    inc dl
     loop .move_filename_loop
     jmp .move_filename_loop_after
 
@@ -398,14 +422,11 @@ parse_type_or_exec:
     test ch, 0x80
     jnz .fail_type
     push es
-    lea bx, [0x4000]
+    lea bx, [0x3000]
     mov es, bx
     xor bx, bx
     int 0x22
     pop es
-    mov ah, 0x1
-    mov al, 0xa
-    int 0x21
     popa
     ret
 .fail_lack:
@@ -707,17 +728,17 @@ msg_help db "List of commands:", endl, \
             "dir", endl, \
             "help", endl, \
             "type <file name>", endl, \
-            "<executable file name>", endl, \
+            "<executable file name> [executable arguments]", endl, \
             0
 
 error_cd_format db "Directory format must be like so: DirName (or / for root)", endl, 0
-error_not_file db "That is a directory!", endl, 0
+error_not_file db "File specified is a directory!", endl, 0
 error_not_exist db "File specified does not exist.", endl, 0
-error_not_directory db "That is a file!", endl, 0
+error_not_directory db "Directory specified is a file!", endl, 0
 error_dir_not_exist db "Directory specified does not exist.", endl, 0
 error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
 error_not_command db "Not a command, nor an executable file.", endl, 0
-error_invalid_drive db "Invalid drive letter/number! (Accepted: A/a, B/b)", endl, 0
+error_invalid_drive db "Invalid drive letter/number! (Accepted: A/a/B/b)", endl, 0
 error_drive_missing db "Drive not inserted.", endl, 0
 
 folder_system db "System          "
@@ -729,8 +750,8 @@ directory_size db ?
 
 current_working_directory db 17 dup(?)
 
-input_buffer db 33 dup(?)
-MAX_INPUT_SIZE = 32
+input_buffer db MAX_INPUT_SIZE+1 dup(?)
+MAX_INPUT_SIZE = 256
 
 filename_buffer db 16 dup(?)
 

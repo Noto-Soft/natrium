@@ -17,7 +17,7 @@ cp assets/reminder.txt natrium/Documents/
 rm -rf natrium
 
 mkdir disk2
-cp build/hello.bin disk2/hello.exe
+cp build/hello.exe disk2/
 cp assets/yep.txt disk2/
 ./tools/nfs disk2.img pack --size-kb 1440 --volume STUFF disk2
 rm -rf disk2
