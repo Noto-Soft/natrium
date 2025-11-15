@@ -14,14 +14,8 @@ start:
     int 0x21
     pop si
 
-    mov ah, 0x4
-    int 0x21
-    mov ah, 0x1
-    mov al, 0xa
-    int 0x21
-
     test si, si
-    jz exit
+    jz world
 
     mov ax, es
     mov ds, ax
@@ -30,10 +24,21 @@ start:
     int 0x21
 
     inc ah
-    mov al, 0xa
+    mov al, "!"
+    int 0x21
+    mov al, endl
+    int 0x21
+
+    jmp exit
+
+world:
+    xor ah, ah
+    mov bl, 0x7
+    lea si, [msg_2]
     int 0x21
 
 exit:
     retf
 
-msg db "Hello, world!", endl, 0
+msg db "Hello, ", 0
+msg_2 db "world!", endl, 0
