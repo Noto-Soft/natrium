@@ -24,4 +24,4 @@ rm -rf disk2
 
 dd if=build/boot.bin of=natrium.img conv=notrunc
 
-qemu-system-i386 -drive file=natrium.img,if=floppy,format=raw -drive file=disk2.img,if=floppy,format=raw -monitor stdio
+# qemu-system-i386 -drive file=natrium.img,if=floppy,format=raw -drive file=disk2.img,if=floppy,format=raw -monitor stdio
