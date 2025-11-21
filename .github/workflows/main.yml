@@ -34,15 +34,44 @@ jobs:
       - name: Run build script
         run: ./build.sh
 
-      - name: Upload binaries to release
+      # Conditional Step: If the event is 'release', use upload_url directly
+      - name: Upload binaries to release (for release event)
         uses: actions/upload-release-asset@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url || '' }}  # Use the upload_url from the release event
+          upload_url: ${{ github.event.release.upload_url }}
           asset_path: ./natrium.img
           asset_name: natrium.img
           asset_content_type: application/octet-stream
-        if: github.event_name == 'release'  # Only run the upload if the event is a release event
+        if: github.event_name == 'release'
 
-      # Optionally, if the manual dispatch is used, you could add an additional step to create a release and upload the asset manually.
+      # If triggered by workflow_dispatch, create a release and upload the binary
+      - name: Create release (for manual dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          TAG_NAME="${{ github.event.inputs.tag_name }}"
+          echo "Creating release for tag $TAG_NAME"
+          
+          # Create a release via the GitHub API
+          response=$(curl -s -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -d '{"tag_name": "'"${TAG_NAME}"'", "name": "'"${TAG_NAME}"'", "body": "Release created manually."}' \
+            "https://api.github.com/repos/${{ github.repository }}/releases")
+          
+          # Extract the upload URL for the new release
+          upload_url=$(echo "$response" | jq -r .upload_url | sed -e 's/{?name,label}//')
+          
+          # Store the upload URL in a file for later use
+          echo "::set-output name=upload_url::$upload_url"
+          
+      # Upload binaries after creating a release manually (for workflow_dispatch)
+      - name: Upload binaries to release (for workflow_dispatch)
+        uses: actions/upload-release-asset@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          upload_url: ${{ steps.create_release.outputs.upload_url }}  # Get from previous step
+          asset_path: ./natrium.img
+          asset_name: natrium.img
+          asset_content_type: application/octet-stream
+        if: github.event_name == 'workflow_dispatch'
