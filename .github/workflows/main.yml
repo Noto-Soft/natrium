@@ -1,9 +1,9 @@
 name: build
 
+permissions:
+  contents: write
+
 on:
-  push:
-    tags:
-      - '*'
   workflow_dispatch:
 
 jobs:
