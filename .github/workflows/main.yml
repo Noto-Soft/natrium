@@ -39,7 +39,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          upload_url: ${{ github.event.release.upload_url }}
+          upload_url: ${{ github.event.release.upload_url || '' }}  # Use the upload_url from the release event
           asset_path: ./natrium.img
           asset_name: natrium.img
           asset_content_type: application/octet-stream
+        if: github.event_name == 'release'  # Only run the upload if the event is a release event
+
+      # Optionally, if the manual dispatch is used, you could add an additional step to create a release and upload the asset manually.
