@@ -21,6 +21,9 @@ jobs:
           fasm --version || echo "FASM installed"
           python3 --version
 
+      - name: Create build directory
+        run: mkdir -p build/
+
       - name: Make build.sh executable
         run: chmod +x ./build.sh
 
