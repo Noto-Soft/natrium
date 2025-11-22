@@ -255,6 +255,7 @@ parse_prompt:
     push word return_point
     push word 0x8000
     push word 0
+    mov dl, [cs:drive]
     retf
 .failure:
     xor ah, ah

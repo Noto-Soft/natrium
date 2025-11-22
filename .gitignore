@@ -1,5 +1,5 @@
-natrium.img
-disk2.img
+*.img
 *.bin
 *.sys
 *.exe
+build/*.bmp

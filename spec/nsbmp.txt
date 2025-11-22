@@ -1,0 +1,31 @@
+[2 bytes for start of header]
+
+if BM
+2 bytes for width
+2 bytes for height
+the rest of image is 8bpp indexed
+
+if CM
+2 bytes for width
+2 bytes for height
+768 bytes describing the pallete
+the rest of the image is 8bpp indexed
+
+if 4M
+2 bytes for width
+2 bytes for height
+48 bytes describing the pallete
+the rest of the image is 4bpp indexed
+
+if MM
+2 bytes for width
+2 bytes for height
+6 bytes for the pallete
+the rest of the image is 1bpp monochrome
+
+if Bm (NSBMP 2.0)
+1 byte for the type (V for default vga pallete, C for custom pallete, R for reduced 4bpp pallete, T for tiny 2bpp pallete, M for 1bpp pallete)
+2 bytes for width
+2 bytes for height
+??? bytes for the pallete (6 for monochrome, 0 for vga, 12 for 2bpp, 48 for 4bpp, 768 for 8bpp)
+the rest of the image is image data
