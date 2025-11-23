@@ -22,9 +22,9 @@ cp assets/logo.txt natrium/System/logo.sys.txt
 cp assets/boot.txt natrium/System/boot.sys.txt
 cp assets/reminder.txt natrium/Documents/
 cp assets/yep.txt natrium/Documents/
-cp build/hello.exe disk2/
-cp build/bitmap.exe disk2/
-cp build/bliss.bmp disk2/
+cp build/hello.exe natrium/
+cp build/bitmap.exe natrium/
+cp build/bliss.bmp natrium/
 ./tools/nfs natrium.img pack --size-kb 1440 --volume NATRIUM natrium
 rm -rf natrium
 

@@ -6,3 +6,4 @@
 0.6 - Fixed problem with bootloader where it couldn't load the kernel unless it was the first entry in the FS, also add .exe autocomplete, and add escaping characters for printing functions.
 0.7 - Actually implement argument passing (from the ABI written a while ago)
 0.8 - update hello.exe to have optional argument passed
+0.9 - Create bitmap drawing program and move everything to the A: drive

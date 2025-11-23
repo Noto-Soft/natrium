@@ -9,6 +9,27 @@ start:
 
     mov [drive], dl
 
+    test si, si
+    jz read_image
+
+    clc
+    lea di, [image_name]
+    mov cx, 16
+.image_name_load_loop:
+    mov al, [es:si]
+    inc si
+    jc .set_space
+    test al, al
+    jz .set_space
+    mov [di], al
+    inc di
+    loop .image_name_load_loop
+    jmp read_image
+.set_space:
+    mov byte [di], " "
+    inc di
+    loop .image_name_load_loop
+
 read_image:
     xor ah, ah
     mov al, 0x13
@@ -104,14 +125,11 @@ draw_8bpp:
     ; jmp exit
 
 exit:
-    mov ax, 0x3
-    int 0x10
-
+    call reset_vga
     retf
 
 fail_not_nsbmp2:
-    mov ax, 0x3
-    int 0x10
+    call reset_vga
 
     mov ax, cs
     mov ds, ax
@@ -122,9 +140,8 @@ fail_not_nsbmp2:
     retf
 
 fail_not_valid:
-    mov ax, 0x3
-    int 0x10
-    
+    call reset_vga
+
     mov ax, cs
     mov ds, ax
     xor ah, ah
@@ -134,8 +151,7 @@ fail_not_valid:
     retf
 
 fail_not_exist:
-    mov ax, 0x3
-    int 0x10
+    call reset_vga
     
     mov ax, cs
     mov ds, ax
@@ -146,8 +162,7 @@ fail_not_exist:
     retf
 
 fail_not_file:
-    mov ax, 0x3
-    int 0x10
+    call reset_vga
     
     mov ax, cs
     mov ds, ax
@@ -287,6 +302,20 @@ rept 8 {
     pop bx
     pop ax
     ret	
+
+reset_vga:
+    mov ax, 0x3
+    int 0x10
+
+    mov ah, 0xa
+    mov bl, 0x7
+    int 0x21
+
+    mov ah, 0x5
+    xor cx, cx
+    int 0x21
+
+    ret
 
 error_not_nsbmp2 db "File specified is not NSBMP 2.0 format.", endl, 0
 error_not_valid db "Bitmap specified does not have a supported format.", endl, 0
