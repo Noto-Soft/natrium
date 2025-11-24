@@ -14,12 +14,13 @@ ATTR_SYSTEM = 0x01
 ATTR_DIR = 0x80
 SUPERBLOCK_NEXT_BLOCK_OFFSET = 17  # offset of next free block word in superblock
 
-# Directory entry offsets
+# Directory entry offsets (new layout)
 OFF_NAME = 0
 OFF_START = 16
 OFF_NUM_BLOCKS = 18
 OFF_ATTR = 19
-OFF_PADDING = 20
+OFF_SIZE = 20   # 4-byte DWORD file size (new)
+# bytes 24-31 are reserved / zeroes
 
 # commonly-considered plaintext extensions -> encode to cp437
 TEXT_EXTS = {
@@ -112,13 +113,28 @@ class NatriumFS:
             start_block, = struct.unpack('<H', entry[OFF_START:OFF_START + 2])
             num_blocks = entry[OFF_NUM_BLOCKS]
             attr = entry[OFF_ATTR]
-            padding = struct.unpack('<H', entry[OFF_PADDING:OFF_PADDING + 2])[0]
+
+            # Read 4-byte size (new layout). For backward compatibility, if size==0 but
+            # the two bytes at OFF_SIZE look like an old 2-byte padding, interpret them.
+            raw_size_dword = struct.unpack('<I', entry[OFF_SIZE:OFF_SIZE + 4])[0]
+            padding16 = struct.unpack('<H', entry[OFF_SIZE:OFF_SIZE + 2])[0]
+            size = raw_size_dword
+            if size == 0 and padding16 != 0:
+                # legacy padding case: old layout stored a 2-byte padding (bytes to subtract)
+                # compute size = num_blocks * BLOCK_SIZE - padding16
+                try:
+                    computed = num_blocks * BLOCK_SIZE - padding16
+                    if computed >= 0:
+                        size = computed
+                except Exception:
+                    size = 0
+
             entries.append({
                 "name": name,
                 "start_block": start_block,
                 "num_blocks": num_blocks,
                 "attr": attr,
-                "padding": padding
+                "size": size
             })
         return entries
 
@@ -160,8 +176,9 @@ class NatriumFS:
         entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
         entry[OFF_NUM_BLOCKS] = ROOT_DIR_BLOCKS
         entry[OFF_ATTR] = ATTR_DIR
-        entry[OFF_PADDING:OFF_PADDING + 2] = struct.pack('<H', 0)
-        entry[22:32] = b'\x00' * 10
+        # new layout: 4-byte size (0 for directories) and 8 zero bytes reserved
+        entry[OFF_SIZE:OFF_SIZE + 4] = struct.pack('<I', 0)
+        entry[24:32] = b'\x00' * 8
 
         root_buf[offset:offset + 32] = bytes(entry)
         self._write_dir_buffer(2, root_buf)
@@ -201,21 +218,14 @@ class NatriumFS:
             chunk = data_bytes[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
             self._write_block(start_block + i, chunk)
 
-        # compute padding
-        padding = (num_blocks * BLOCK_SIZE) - file_size
-        if padding < 0:
-            padding = 0
-        if padding >= BLOCK_SIZE:
-            padding = BLOCK_SIZE - 1
-
-        # write directory entry
+        # write directory entry (new layout: store full byte size)
         entry = bytearray(32)
         entry[OFF_NAME:OFF_NAME + 16] = target_name.ljust(16).encode('ascii')[:16]
         entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
         entry[OFF_NUM_BLOCKS] = num_blocks
         entry[OFF_ATTR] = ATTR_FILE | (ATTR_SYSTEM if system else 0)
-        entry[OFF_PADDING:OFF_PADDING + 2] = struct.pack('<H', padding)
-        entry[22:32] = b'\x00' * 10
+        entry[OFF_SIZE:OFF_SIZE + 4] = struct.pack('<I', file_size)
+        entry[24:32] = b'\x00' * 8
 
         parent_buf[entry_offset:entry_offset + 32] = bytes(entry)
         self._write_dir_buffer(parent_block, parent_buf)
@@ -230,9 +240,12 @@ class NatriumFS:
                 data = bytearray()
                 for i in range(e['num_blocks']):
                     data.extend(self._read_block(e['start_block'] + i))
-                padding = int(e.get('padding', 0) or 0)
-                padding = max(0, min(padding, BLOCK_SIZE - 1, len(data)))
-                total_bytes = e['num_blocks'] * BLOCK_SIZE - padding
+                # Prefer explicit size; fallback to full blocks (compatibility)
+                size = int(e.get('size', 0) or 0)
+                if size <= 0:
+                    total_bytes = e['num_blocks'] * BLOCK_SIZE
+                else:
+                    total_bytes = size
                 data = bytes(data[:total_bytes])
                 if out_path:
                     os.makedirs(os.path.dirname(out_path), exist_ok=True)
@@ -271,13 +284,18 @@ class NatriumFS:
     def _write_file_and_decode(self, e, output_dir, rel_path):
         out_path = os.path.join(output_dir, rel_path, e['name'])
         data = b''.join(self._read_block(e['start_block'] + i) for i in range(e['num_blocks']))
-        total_bytes = e['num_blocks'] * BLOCK_SIZE - e.get('padding', 0)
+        size = int(e.get('size', 0) or 0)
+        if size <= 0:
+            total_bytes = e['num_blocks'] * BLOCK_SIZE
+        else:
+            total_bytes = size
         data = data[:total_bytes]
         os.makedirs(os.path.dirname(out_path), exist_ok=True)
         with open(out_path, 'wb') as f:
             f.write(data)
         print(f"[FILE] {os.path.join(rel_path, e['name'])} ({len(data)} bytes)")
 
+        # decode plaintext files saved as cp437 (only for .txt by default)
         if e['name'].lower().endswith(".txt"):
             try:
                 decoded_text = data.decode('cp437')
@@ -463,7 +481,7 @@ def main():
             entries = fs.list_dir(parent_block)
             for e in entries:
                 type_str = "DIR" if (e['attr'] & ATTR_DIR) else "FILE"
-                print(f"{e['name']:16} {type_str} blocks={e['num_blocks']} start={e['start_block']} pad={e.get('padding',0)}")
+                print(f"{e['name']:16} {type_str} blocks={e['num_blocks']} start={e['start_block']} size={e.get('size',0)}")
 
         elif args.command == "read":
             parent_block = 2

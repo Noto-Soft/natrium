@@ -1,5 +1,5 @@
-executables (.exe) files get passed the current working directory name as well as the drive number in bp and dl respectively
-es:si also contains the arguments to the program if any
+executables (.exe) files get passed the current working directory name as well as the drive number in es:bp and dl respectively (bp is zero if root)
+es:si also contains the arguments to the program if any (si will be zero if none)
 if you plan on doing complex parsing of arguments load the arguments into a buffer of length 256 (stop loading when you encounter a zero)
 
 executables are always loaded at the offset 0 in the segment

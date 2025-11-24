@@ -9,6 +9,7 @@ fasm src/kernel/command.asm build/command.sys
 fasm src/kernel/unreal.asm build/unreal.sys
 fasm src/other/hello.asm build/hello.exe
 fasm src/other/bitmap.asm build/bitmap.exe
+fasm src/other/hijack.asm build/hijack.exe
 
 ./tools/nsbmp -r assets/bliss.bmp build/bliss.bmp
 
@@ -25,6 +26,7 @@ cp assets/yep.txt natrium/Documents/
 cp build/hello.exe natrium/
 cp build/bitmap.exe natrium/
 cp build/bliss.bmp natrium/
+cp build/hijack.exe natrium/
 ./tools/nfs natrium.img pack --size-kb 1440 --volume NATRIUM natrium
 rm -rf natrium
 

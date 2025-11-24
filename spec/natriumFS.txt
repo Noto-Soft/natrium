@@ -22,8 +22,8 @@ Root directory will always have 127 max entries
 Entry layout:
 16 bytes name, no zero terminator, padded with spaces, filename itself cannot contain spaces
 Word for file starting block, byte for how many blocks to load, attribute byte
-Word for padding length (how many zeroes added to expand it to a 1kb block). Probably useful for something. You can subtract this from the file size * 1024 to get the actual byte size of the file.
-10 zero bytes for aligning to 32 bytes
+Double word for byte size of file.
+8 zero bytes for aligning to 32 bytes
 If the first byte of the name is 0 then assume the file entry is free
 
 attribute byte: (or'd together)

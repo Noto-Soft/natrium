@@ -31,10 +31,6 @@ start:
     loop .image_name_load_loop
 
 read_image:
-    xor ah, ah
-    mov al, 0x13
-    int 0x10
-
     mov ax, cs
     mov ds, ax
 
@@ -78,6 +74,9 @@ parse_header:
     jmp fail_not_valid
 
 set_palletes:
+    mov ax, 0x13
+    int 0x10
+    
     xor al, al
 .loop:
     mov bx, [si]
@@ -129,8 +128,6 @@ exit:
     retf
 
 fail_not_nsbmp2:
-    call reset_vga
-
     mov ax, cs
     mov ds, ax
     xor ah, ah
@@ -140,8 +137,6 @@ fail_not_nsbmp2:
     retf
 
 fail_not_valid:
-    call reset_vga
-
     mov ax, cs
     mov ds, ax
     xor ah, ah
@@ -151,8 +146,6 @@ fail_not_valid:
     retf
 
 fail_not_exist:
-    call reset_vga
-    
     mov ax, cs
     mov ds, ax
     xor ah, ah
@@ -162,8 +155,6 @@ fail_not_exist:
     retf
 
 fail_not_file:
-    call reset_vga
-    
     mov ax, cs
     mov ds, ax
     xor ah, ah

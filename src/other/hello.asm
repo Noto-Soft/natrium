@@ -41,4 +41,4 @@ exit:
     retf
 
 msg db "Hello, ", 0
-msg_2 db "world!", endl, 0
+msg_2 db "world", endl, 0

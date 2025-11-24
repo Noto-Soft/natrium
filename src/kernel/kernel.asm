@@ -137,6 +137,8 @@ main:
     push word .return_point_unreal_sys
     push es
     push bx
+    xor bp, bp
+    xor si, si
     retf
 .return_point_unreal_sys:
     pop es
@@ -162,6 +164,8 @@ main:
     push word .return_point_command_sys
     push es
     push bx
+    xor bp, bp
+    xor si, si
     retf
 .return_point_command_sys:
     pop es
@@ -212,7 +216,7 @@ int21:
     dw puts, putc, poke_char, puts_length, putd, \
         set_cursor_position, get_cursor_position, set_cursor_shape, enable_cursor, disable_cursor, \
         clear_screen, scroll_screen, \
-        putc_escaped
+        putc_escaped, putdd, newline
     dw (256-($-.call_table))/2 dup(stub)
 
 int22:
@@ -337,7 +341,7 @@ put_char:
     push es
     pushf
     jc .ignore_escaped_character
-    cmp al, 0xa
+    cmp al, endl
     je .newline
     cmp al, 0xd
     je .carriage_return
@@ -479,7 +483,7 @@ putd:
 
     xor si, si
 
-    or cx, cx
+    test cx, cx
     jnz .convert
 
     mov al, '0'
@@ -495,7 +499,7 @@ putd:
     pop bx
     push dx
     inc si
-    or ax, ax
+    test ax, ax
     jnz .next_digit
 .print_digits:
     pop dx
@@ -508,6 +512,56 @@ putd:
     pop si
     pop dx
     pop bx
+    pop ax
+    ret
+
+putdd:
+    push eax
+    push ebx
+    push edx
+    push si
+
+    xor si, si
+
+    test ecx, ecx
+    jnz .convert
+
+    mov al, '0'
+    call putc
+    jmp .done
+.convert:
+    mov eax, ecx
+.next_digit:
+    xor edx, edx
+    push ebx
+    mov ebx, 10
+    div ebx
+    pop ebx
+    push edx
+    inc esi
+    test eax, eax
+    jnz .next_digit
+.print_digits:
+    pop edx
+    add dl, '0'
+    mov al, dl
+    call putc
+    dec esi
+    jnz .print_digits
+.done:
+    pop si
+    pop edx
+    pop ebx
+    pop eax
+    ret
+
+newline:
+    push ax
+    pushf
+    clc
+    mov al, endl
+    call put_char
+    popf
     pop ax
     ret
 
@@ -774,7 +828,7 @@ get_file:
 
     pop ax
 
-    or ax, ax
+    test ax, ax
     jz .read_root
 
     cmp cl, 8

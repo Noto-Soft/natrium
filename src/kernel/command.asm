@@ -12,12 +12,12 @@ start:
 
     mov [directory_block], 0
 
-    mov ah, 0x1
-    mov al, 0xa
-    mov bl, 0x7
+    mov ah, 0xe
     int 0x21
 
 prompt:
+    mov bl, 0x7
+    
     xor ax, ax
     mov cx, MAX_INPUT_SIZE
     lea di, [input_buffer]
@@ -55,9 +55,7 @@ prompt:
     jmp .loop
 
 parse_prompt:
-    mov ah, 0x1
-    mov al, 0xa
-    mov bl, 0x7
+    mov ah, 0xe
     int 0x21
 
     mov al, [input_buffer]
@@ -84,7 +82,7 @@ parse_prompt:
     call cwd_message
 
     mov ah, 0x1
-    mov al, 0xa
+    mov al, endl
     int 0x21
     mov al, " "
     int 0x21
@@ -256,6 +254,11 @@ parse_prompt:
     push word 0x8000
     push word 0
     mov dl, [cs:drive]
+    xor bp, bp
+    cmp byte [directory_block], 0
+    jne .ok_lets_go
+    lea bp, [directory_name]
+.ok_lets_go:
     retf
 .failure:
     xor ah, ah
@@ -299,7 +302,7 @@ move_filename:
     jmp .move_filename_loop_after
 
 parse_cd:
-    mov ax, 0
+    xor ax, ax
     pusha
     mov al, [input_buffer+2]
     test al, al
@@ -337,6 +340,10 @@ parse_cd:
     jz .cd_fail_type
     mov [directory_block], ax
     mov [directory_size], cl
+    lea di, [directory_name]
+    mov cx, 8
+    rep stosw
+    lea si, [filename_buffer]
     lea di, [current_working_directory]
     mov cx, 16
 .set_cwd_loop:
@@ -562,12 +569,10 @@ dir:
 .dir_loop_dirs:
     mov al, [si]
     test al, al
-    jz .loop_sys_files
+    jz .loop_files
     mov al, [si+19]
     test al, 0x80
     jz .next_dir
-    test al, 0x01
-    jnz .next_dir
     push cx
     mov cx, 16
     mov ah, 0x3
@@ -578,35 +583,14 @@ dir:
     xor ah, ah
     int 0x21
     pop si
+    mov ah, 0x1
+    mov al, endl
+    int 0x21
+    mov al, " "
+    int 0x21
 .next_dir:
     add si, 32
     loop .dir_loop_dirs
-.loop_sys_files:
-    xor cx, cx
-    mov cl, byte [buffer]
-    lea si, [buffer+32]
-.dir_loop_sys_files:
-    mov al, [si]
-    test al, al
-    jz .loop_files
-    mov al, [si+19]
-    test al, 0x80
-    jnz .next_sys_file
-    test al, 0x01
-    jz .next_sys_file
-    push cx
-    mov cx, 16
-    mov ah, 0x3
-    int 0x21
-    pop cx
-    push si
-    lea si, [str_system]
-    xor ah, ah
-    int 0x21
-    pop si
-.next_sys_file:
-    add si, 32
-    loop .dir_loop_sys_files
 .loop_files:
     xor cx, cx
     mov cl, byte [buffer]
@@ -618,18 +602,37 @@ dir:
     mov al, [si+19]
     test al, 0x80
     jnz .next_file
-    test al, 0x01
-    jnz .next_file
     push cx
     mov cx, 16
     mov ah, 0x3
     int 0x21
     pop cx
-    push si
-    lea si, [str_file]
-    xor ah, ah
+    push ecx
+    mov ah, 0xd
+    mov ecx, [si+20]
+    cmp ecx, 1024
+    jnae .write_file_size_bytes
+    shr ecx, 10
+    mov ah, 0x4
     int 0x21
-    pop si
+    mov ah, 0x1
+    mov al, "k"
+    int 0x21
+    mov al, "b"
+    int 0x21
+    pop ecx
+    jmp .after_file_size
+.write_file_size_bytes:
+    int 0x21
+    mov ah, 0x1
+    mov al, "b"
+    int 0x21
+    pop ecx
+.after_file_size:
+    mov al, endl
+    int 0x21
+    mov al, " "
+    int 0x21
 .next_file:
     add si, 32
     loop .dir_loop_files
@@ -685,7 +688,7 @@ set_drive:
     call cwd_message
 
     mov ah, 0x1
-    mov al, 0xa
+    mov al, endl
     int 0x21
     mov al, " "
     int 0x21
@@ -709,9 +712,7 @@ set_drive:
 
 directory_of db "Directory of ", 0
 
-str_file db "FILE", endl, " ", 0
-str_system db "SYSTEM FILE", endl, " ", 0
-str_directory db "DIRECTORY", endl, " ", 0
+str_directory db "<DIR>", 0
 
 str_cd db "cd", 0
 str_cls db "cls", 0
@@ -742,12 +743,11 @@ error_not_command db "Not a command, nor an executable file.", endl, 0
 error_invalid_drive db "Invalid drive letter/number! (Accepted: A/a/B/b)", endl, 0
 error_drive_missing db "Drive not inserted.", endl, 0
 
-folder_system db "System          "
-
 drive db ?
 
 directory_block dw ?
 directory_size db ?
+directory_name db 16 dup(?)
 
 current_working_directory db 17 dup(?)
 
