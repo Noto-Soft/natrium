@@ -1,228 +1,506 @@
 #!/usr/bin/env python3
-q='.txt'
-p=RuntimeError
-o=Exception
-n=ValueError
-j=False
-i='<I'
-h='wb'
-g='r+b'
-d='size'
-c='ascii'
-b='NATRIUM'
-a=sorted
-Z=int
-Y='cp437'
-X=bytearray
-W=bytes
-V=FileNotFoundError
-T='attr'
-S='start_block'
-R=len
-N=True
-M='num_blocks'
-L='<H'
-K=range
-J=open
-H=b'\x00'
-F=None
-E='name'
-C=print
-import os as B,struct as G,argparse as r,math
-A=1024
-D=4
-k=8
-U=127
-s=0
-t=1
-O=128
-l=17
-P=0
-Q=16
-e=18
-f=19
-I=20
-m={q,'.ans','.nfo','.cfg','.ini','.bat','.cmd','.md','.asm','.c','.h','.cpp','.py','.json','.xml','.csv','.log'}
-class u:
-	def __init__(A,path):A.path=path;A.disk=F
-	def open(A,mode=g):
-		if not B.path.exists(A.path)and'w'not in mode:raise V(A.path)
-		A.disk=J(A.path,mode)
-	def close(A):
-		if A.disk:A.disk.flush();A.disk.close();A.disk=F
-	def _read_next_free_block(B):B.disk.seek(A+l);return G.unpack(L,B.disk.read(2))[0]
-	def _write_next_free_block(B,block_num):B.disk.seek(A+l);B.disk.write(G.pack(L,block_num))
-	def create(E,size_kb,volume_name=b):
-		F=size_kb*1024
-		with J(E.path,h)as B:
-			B.write(H*A);I=volume_name.ljust(16).encode(c)[:16];B.write(I);B.write(b'\x01');B.write(G.pack(L,6));B.write(H*(A-19));B.write(W([U]));B.write(H*31);B.write(H*(A*D-32));C=F-B.tell()
-			if C<0:raise n('Disk size too small for filesystem structures')
-			B.write(H*C)
-	def _read_block(B,block_num,size=A):B.disk.seek(block_num*A);return B.disk.read(size)
-	def _write_block(B,block_num,data):
-		if R(data)>A:raise n('Data exceeds block size')
-		B.disk.seek(block_num*A);B.disk.write(data.ljust(A,H))
-	def _read_dir_buffer(B,start_block,num_blocks):C=min(num_blocks,k);return B._read_block(start_block,C*A)
-	def _write_dir_buffer(C,start_block,buf,blocks=D):
-		for B in K(blocks):D=buf[B*A:(B+1)*A];C._write_block(start_block+B,D)
-	def _parse_dir_buffer(Z,buf):
-		F=[]
-		for O in K(U):
-			D=32+O*32
-			if D+32>R(buf):break
-			B=buf[D:D+32]
-			if B[0]==0:continue
-			V=B[P:P+16].decode(c,errors='ignore').rstrip();W,=G.unpack(L,B[Q:Q+2]);H=B[e];X=B[f];Y=G.unpack(i,B[I:I+4])[0];J=G.unpack(L,B[I:I+2])[0];C=Y
-			if C==0 and J!=0:
-				try:
-					N=H*A-J
-					if N>=0:C=N
-				except o:C=0
-			F.append({E:V,S:W,M:H,T:X,d:C})
-		return F
-	def list_dir(B,start_block=2):C=B._read_block(start_block,A*D);return B._parse_dir_buffer(C)
-	def find_dir_by_name(B,name):
-		for A in B.list_dir(2):
-			if A[E]==name and A[T]&O:return A[S]
-	def mkdir(C,name):
-		N=X(C._read_block(2,A*D));J=F
-		for E in K(U):
-			R=32+E*32
-			if N[R]==0:J=R;break
-		if J is F:raise p('No free directory entries in root')
-		M=C._read_next_free_block();C._write_next_free_block(M+D);S=W([U])+H*31;S+=H*(A*D-32)
-		for E in K(D):C._write_block(M+E,S[E*A:(E+1)*A])
-		B=X(32);B[P:P+16]=name.ljust(16).encode(c)[:16];B[Q:Q+2]=G.pack(L,M);B[e]=D;B[f]=O;B[I:I+4]=G.pack(i,0);B[24:32]=H*8;N[J:J+32]=W(B);C._write_dir_buffer(2,N);return M
-	def add_file(D,file_path,target_name=F,parent_block=2,system=j):
-		C=file_path;A=target_name
-		if A is F:A=B.path.basename(C)
-		with J(C,'rb')as E:G=E.read()
-		return D.add_file_bytes(A,G,parent_block,system)
-	def add_file_bytes(C,target_name,data_bytes,parent_block=2,system=j):
-		T=parent_block;S=data_bytes;V=R(S);E=(V+A-1)//A
-		if E==0:E=1
-		O=X(C._read_block(T,A*D));M=F
-		for J in K(U):
-			Y=32+J*32
-			if O[Y]==0:M=Y;break
-		if M is F:raise p('No free directory entries in target directory')
-		N=C._read_next_free_block();C._write_next_free_block(N+E)
-		for J in K(E):Z=S[J*A:(J+1)*A];C._write_block(N+J,Z)
-		B=X(32);B[P:P+16]=target_name.ljust(16).encode(c)[:16];B[Q:Q+2]=G.pack(L,N);B[e]=E;B[f]=s|(t if system else 0);B[I:I+4]=G.pack(i,V);B[24:32]=H*8;O[M:M+32]=W(B);C._write_dir_buffer(T,O);return N
-	def read_file(G,file_name,out_path=F,parent_block=2):
-		I=file_name;H=out_path;Q=G._read_block(parent_block,A*D);R=G._parse_dir_buffer(Q)
-		for C in R:
-			if C[E]==I and C[T]&O==0:
-				F=X()
-				for U in K(C[M]):F.extend(G._read_block(C[S]+U))
-				L=Z(C.get(d,0)or 0)
-				if L<=0:P=C[M]*A
-				else:P=L
-				F=W(F[:P])
-				if H:
-					B.makedirs(B.path.dirname(H),exist_ok=N)
-					with J(H,h)as Y:Y.write(F)
-				return F
-		raise V(I)
-	def extract_all(F,output_dir,parent_block=2,rel_path=''):
-		H=rel_path;G=output_dir;I=B.path.join(G,H);B.makedirs(I,exist_ok=N);J=F._read_block(parent_block,A*D);K=F._parse_dir_buffer(J)
-		for C in K:
-			if C[T]&O:L=B.path.join(H,C[E]);P=min(C[M],k);F._extract_dir_to_host(G,C[S],L,P)
-			else:F._write_file_and_decode(C,G,H)
-	def _extract_dir_to_host(D,output_dir,dir_start_block,rel_path,read_blocks):
-		H=output_dir;F=rel_path;I=B.path.join(H,F);B.makedirs(I,exist_ok=N);J=D._read_block(dir_start_block,A*read_blocks);K=D._parse_dir_buffer(J)
-		for G in K:
-			if G[T]&O:C(f"[SKIP-DEEP] {B.path.join(F,G[E])} (nested dirs not supported)");continue
-			D._write_file_and_decode(G,H,F)
-	def _write_file_and_decode(P,e,output_dir,rel_path):
-		G=output_dir;F=rel_path;H=B.path.join(G,F,e[E]);D=b''.join(P._read_block(e[S]+A)for A in K(e[M]));I=Z(e.get(d,0)or 0)
-		if I<=0:L=e[M]*A
-		else:L=I
-		D=D[:L];B.makedirs(B.path.dirname(H),exist_ok=N)
-		with J(H,h)as Q:Q.write(D)
-		C(f"[FILE] {B.path.join(F,e[E])} ({R(D)} bytes)")
-		if e[E].lower().endswith(q):
-			try:
-				T=D.decode(Y);O=B.path.join(G,F,f"{e[E]}.decoded.txt")
-				with J(O,'w',encoding='utf-8')as U:U.write(T)
-				C(f"[DECODED] {O}")
-			except o as V:C(f"[DECODE-ERROR] {e[E]}: {V}")
-	def pack_from_folder(H,source_dir,size_kb=F,volume_name=b):
-		W=size_kb;V='replace';U=source_dir
-		if not B.path.isdir(U):raise NotADirectoryError(U)
-		def h(name):
-			F='.sys.';A=name;B=A.lower();C=j
-			if B.endswith('.sys'):C=N;D=A
-			elif F in B:C=N;E=B.rindex(F);D=A[:E]+A[E+4:]
-			else:D=A
-			return D[:16],C
-		X=[];P={}
-		for Z in a(B.listdir(U)):
-			Q=B.path.join(U,Z)
-			if B.path.isfile(Q):X.append((Z,Q))
-			elif B.path.isdir(Q):
-				M=[]
-				for O in a(B.listdir(Q)):
-					E=B.path.join(Q,O)
-					if B.path.isfile(E):M.append((O,E))
-				P[Z]=M
-		if W is F:
-			S=A*(2+D);S+=R(P)*(A*D)
-			for(G,E)in X:b=B.path.getsize(E);c=max(1,(b+A-1)//A);S+=c*A
-			for(K,M)in P.items():
-				for(G,E)in M:b=B.path.getsize(E);c=max(1,(b+A-1)//A);S+=c*A
-			S+=A*10;W=math.ceil(S/1024)
-		H.create(W,volume_name);H.open(g)
-		try:
-			i={}
-			for K in a(P.keys()):l=K[:16];I=H.mkdir(l);i[K]=I;C(f"[MKDIR] {K} -> block {I}")
-			for(G,E)in X:
-				T,L=h(G);d=B.path.splitext(G)[1].lower()
-				if d in m:
-					with J(E,'r',encoding=Y,errors=V)as O:e=O.read()
-					f=e.encode(Y,errors=V);I=H.add_file_bytes(T,f,parent_block=2,system=L)
-				else:I=H.add_file(E,T,parent_block=2,system=L)
-				C(f"[ADD] root: {G} -> block {I} (system={L})")
-			for(K,M)in a(P.items()):
-				k=i[K]
-				for(G,E)in M:
-					T,L=h(G);d=B.path.splitext(G)[1].lower()
-					if d in m:
-						with J(E,'r',encoding=Y,errors=V)as O:e=O.read()
-						f=e.encode(Y,errors=V);I=H.add_file_bytes(T,f,parent_block=k,system=L)
-					else:I=H.add_file(E,T,parent_block=k,system=L)
-					C(f"[ADD] {K}/{G} -> block {I} (system={L})")
-		finally:H.close()
-def v():
-	i='pack';h='extractall';f='read';e='list';c='mkdir';a='file';Y='add';X='--volume';W='create';Q='--dir';K=r.ArgumentParser(description='NatriumFS v1 utility');K.add_argument('disk',help='Path to NatriumFS disk image');H=K.add_subparsers(dest='command',required=N);U=H.add_parser(W,help='Create a new NatriumFS disk image');U.add_argument('size_kb',type=Z,help='Disk size in KB');U.add_argument(X,default=b,help='Volume name');J=H.add_parser(Y,help='Add file to disk');J.add_argument(a,help='Host file to add');J.add_argument('--name',help='Target filename on disk');J.add_argument(Q,help='Target subdirectory name (optional)');J.add_argument('--sys',help='Sets the file to have the System attribute',action='store_true');j=H.add_parser(c,help='Create a subdirectory in root');j.add_argument(E,help='Subdirectory name');k=H.add_parser(e,help='List files in root or subdirectory');k.add_argument(Q,help='Subdirectory to list (optional)');L=H.add_parser(f,help='Read a file from disk');L.add_argument(a,help='Filename on disk');L.add_argument('--out',help='Output path on host (optional)');L.add_argument(Q,help='Subdirectory to read from (optional)');l=H.add_parser(h,help='Extract entire disk to host');l.add_argument('outdir',help='Destination directory on host');P=H.add_parser(i,help='Pack a folder into a NatriumFS disk image');P.add_argument('source',help='Source folder to pack (top-level files + one-level subdirs)');P.add_argument('--size-kb',type=Z,help='Optional disk size in KB. If omitted, auto-calculated.');P.add_argument(X,default=b,help='Volume name for created image');A=K.parse_args();D=u(A.disk)
-	if A.command==W:D.create(A.size_kb,A.volume);C(f"Created NatriumFS {A.size_kb}KB disk: {A.disk}");return
-	if A.command==i:D.pack_from_folder(A.source,size_kb=A.size_kb,volume_name=A.volume);C(f"Packed folder '{A.source}' into disk image '{A.disk}' (size_kb={A.size_kb or"auto"})");return
-	D.open(g)
-	try:
-		if A.command==c:F=D.mkdir(A.name);C(f"Created subdirectory '{A.name}' at block {F}")
-		elif A.command==Y:
-			G=2
-			if A.dir:
-				F=D.find_dir_by_name(A.dir)
-				if not F:raise V(f"Subdirectory '{A.dir}' not found")
-				G=F
-			m=D.add_file(A.file,A.name,G,A.sys);C(f"Added '{A.file}' as '{A.name or B.path.basename(A.file)}' at block {m}")
-		elif A.command==e:
-			G=2
-			if A.dir:
-				F=D.find_dir_by_name(A.dir)
-				if not F:raise V(f"Subdirectory '{A.dir}' not found")
-				G=F
-			n=D.list_dir(G)
-			for I in n:o='DIR'if I[T]&O else'FILE';C(f"{I[E]:16} {o} blocks={I[M]} start={I[S]} size={I.get(d,0)}")
-		elif A.command==f:
-			G=2
-			if A.dir:
-				F=D.find_dir_by_name(A.dir)
-				if not F:raise V(f"Subdirectory '{A.dir}' not found")
-				G=F
-			p=D.read_file(A.file,A.out,parent_block=G)
-			if not A.out:C(f"Read {R(p)} bytes from '{A.file}'")
-		elif A.command==h:D.extract_all(A.outdir);C(f"Extracted entire disk to '{A.outdir}'")
-	finally:D.close()
-if __name__=='__main__':v()
+import os
+import struct
+import argparse
+import math
+
+# NatriumFS v1 constants
+BLOCK_SIZE = 1024                 # 2 * 512
+ROOT_DIR_BLOCKS = 4               # root directory uses blocks 2-5 (4 blocks)
+MAX_DIR_BLOCKS_TO_READ = 8        # safe cap when reading directories
+ROOT_DIR_MAX_ENTRIES = 127         # max entries in root dir
+ATTR_FILE = 0x00
+ATTR_SYSTEM = 0x01
+ATTR_DIR = 0x80
+SUPERBLOCK_NEXT_BLOCK_OFFSET = 17  # offset of next free block word in superblock
+
+# Directory entry offsets (new layout)
+OFF_NAME = 0
+OFF_START = 16
+OFF_NUM_BLOCKS = 18
+OFF_ATTR = 19
+OFF_SIZE = 20   # 4-byte DWORD file size (new)
+# bytes 24-31 are reserved / zeroes
+
+# commonly-considered plaintext extensions -> encode to cp437
+TEXT_EXTS = {
+    ".txt", ".ans", ".nfo", ".cfg", ".ini", ".bat", ".cmd", ".md",
+    ".asm", ".c", ".h", ".cpp", ".py", ".json", ".xml", ".csv", ".log"
+}
+
+
+class NatriumFS:
+    def __init__(self, path):
+        self.path = path
+        self.disk = None
+
+    def open(self, mode='r+b'):
+        if not os.path.exists(self.path) and 'w' not in mode:
+            raise FileNotFoundError(self.path)
+        self.disk = open(self.path, mode)
+
+    def close(self):
+        if self.disk:
+            self.disk.flush()
+            self.disk.close()
+            self.disk = None
+
+    # ---- Superblock helpers ----
+    def _read_next_free_block(self):
+        self.disk.seek(BLOCK_SIZE + SUPERBLOCK_NEXT_BLOCK_OFFSET)
+        return struct.unpack('<H', self.disk.read(2))[0]
+
+    def _write_next_free_block(self, block_num):
+        self.disk.seek(BLOCK_SIZE + SUPERBLOCK_NEXT_BLOCK_OFFSET)
+        self.disk.write(struct.pack('<H', block_num))
+
+    # ---- Disk creation ----
+    def create(self, size_kb, volume_name="NATRIUM"):
+        total_bytes = size_kb * 1024
+        with open(self.path, "wb") as f:
+            # Boot block
+            f.write(b'\x00' * BLOCK_SIZE)
+
+            # Superblock
+            name = volume_name.ljust(16).encode('ascii')[:16]
+            f.write(name)
+            f.write(b'\x01')                  # FS version
+            f.write(struct.pack('<H', 6))     # next free block = 6
+            f.write(b'\x00' * (BLOCK_SIZE - 19))
+
+            # Root directory
+            f.write(bytes([ROOT_DIR_MAX_ENTRIES]))
+            f.write(b'\x00' * 31)
+            f.write(b'\x00' * (BLOCK_SIZE * ROOT_DIR_BLOCKS - 32))
+
+            # Fill remaining disk
+            remaining = total_bytes - f.tell()
+            if remaining < 0:
+                raise ValueError("Disk size too small for filesystem structures")
+            f.write(b'\x00' * remaining)
+
+    # ---- Low-level block IO ----
+    def _read_block(self, block_num, size=BLOCK_SIZE):
+        self.disk.seek(block_num * BLOCK_SIZE)
+        return self.disk.read(size)
+
+    def _write_block(self, block_num, data):
+        if len(data) > BLOCK_SIZE:
+            raise ValueError("Data exceeds block size")
+        self.disk.seek(block_num * BLOCK_SIZE)
+        self.disk.write(data.ljust(BLOCK_SIZE, b'\x00'))
+
+    # ---- Directory helpers ----
+    def _read_dir_buffer(self, start_block, num_blocks):
+        read_blocks = min(num_blocks, MAX_DIR_BLOCKS_TO_READ)
+        return self._read_block(start_block, read_blocks * BLOCK_SIZE)
+
+    def _write_dir_buffer(self, start_block, buf, blocks=ROOT_DIR_BLOCKS):
+        for i in range(blocks):
+            chunk = buf[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
+            self._write_block(start_block + i, chunk)
+
+    def _parse_dir_buffer(self, buf):
+        entries = []
+        for i in range(ROOT_DIR_MAX_ENTRIES):
+            offset = 32 + i * 32
+            if offset + 32 > len(buf):
+                break
+            entry = buf[offset:offset + 32]
+            if entry[0] == 0:
+                continue
+            name = entry[OFF_NAME:OFF_NAME + 16].decode('ascii', errors='ignore').rstrip()
+            start_block, = struct.unpack('<H', entry[OFF_START:OFF_START + 2])
+            num_blocks = entry[OFF_NUM_BLOCKS]
+            attr = entry[OFF_ATTR]
+
+            # Read 4-byte size (new layout). For backward compatibility, if size==0 but
+            # the two bytes at OFF_SIZE look like an old 2-byte padding, interpret them.
+            raw_size_dword = struct.unpack('<I', entry[OFF_SIZE:OFF_SIZE + 4])[0]
+            padding16 = struct.unpack('<H', entry[OFF_SIZE:OFF_SIZE + 2])[0]
+            size = raw_size_dword
+            if size == 0 and padding16 != 0:
+                # legacy padding case: old layout stored a 2-byte padding (bytes to subtract)
+                # compute size = num_blocks * BLOCK_SIZE - padding16
+                try:
+                    computed = num_blocks * BLOCK_SIZE - padding16
+                    if computed >= 0:
+                        size = computed
+                except Exception:
+                    size = 0
+
+            entries.append({
+                "name": name,
+                "start_block": start_block,
+                "num_blocks": num_blocks,
+                "attr": attr,
+                "size": size
+            })
+        return entries
+
+    def list_dir(self, start_block=2):
+        buf = self._read_block(start_block, BLOCK_SIZE * ROOT_DIR_BLOCKS)
+        return self._parse_dir_buffer(buf)
+
+    def find_dir_by_name(self, name):
+        for e in self.list_dir(2):
+            if e['name'] == name and (e['attr'] & ATTR_DIR):
+                return e['start_block']
+        return None
+
+    # ---- Directory creation ----
+    def mkdir(self, name):
+        root_buf = bytearray(self._read_block(2, BLOCK_SIZE * ROOT_DIR_BLOCKS))
+        offset = None
+        for i in range(ROOT_DIR_MAX_ENTRIES):
+            off = 32 + i * 32
+            if root_buf[off] == 0:
+                offset = off
+                break
+        if offset is None:
+            raise RuntimeError("No free directory entries in root")
+
+        # allocate using next_free_block
+        start_block = self._read_next_free_block()
+        self._write_next_free_block(start_block + ROOT_DIR_BLOCKS)
+
+        # initialize empty directory buffer
+        empty_dir = bytes([ROOT_DIR_MAX_ENTRIES]) + b'\x00' * 31
+        empty_dir += b'\x00' * (BLOCK_SIZE * ROOT_DIR_BLOCKS - 32)
+        for i in range(ROOT_DIR_BLOCKS):
+            self._write_block(start_block + i, empty_dir[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE])
+
+        # write directory entry
+        entry = bytearray(32)
+        entry[OFF_NAME:OFF_NAME + 16] = name.ljust(16).encode('ascii')[:16]
+        entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
+        entry[OFF_NUM_BLOCKS] = ROOT_DIR_BLOCKS
+        entry[OFF_ATTR] = ATTR_DIR
+        # new layout: 4-byte size (0 for directories) and 8 zero bytes reserved
+        entry[OFF_SIZE:OFF_SIZE + 4] = struct.pack('<I', 0)
+        entry[24:32] = b'\x00' * 8
+
+        root_buf[offset:offset + 32] = bytes(entry)
+        self._write_dir_buffer(2, root_buf)
+        return start_block
+
+    # ---- File allocation ----
+    def add_file(self, file_path, target_name=None, parent_block=2, system=False):
+        if target_name is None:
+            target_name = os.path.basename(file_path)
+        with open(file_path, 'rb') as f:
+            data = f.read()
+        return self.add_file_bytes(target_name, data, parent_block, system)
+
+    def add_file_bytes(self, target_name, data_bytes, parent_block=2, system=False):
+        """Add a file to the FS using bytes in memory (does same allocation as add_file)."""
+        file_size = len(data_bytes)
+        num_blocks = (file_size + BLOCK_SIZE - 1) // BLOCK_SIZE
+        if num_blocks == 0:
+            num_blocks = 1
+
+        parent_buf = bytearray(self._read_block(parent_block, BLOCK_SIZE * ROOT_DIR_BLOCKS))
+        entry_offset = None
+        for i in range(ROOT_DIR_MAX_ENTRIES):
+            off = 32 + i * 32
+            if parent_buf[off] == 0:
+                entry_offset = off
+                break
+        if entry_offset is None:
+            raise RuntimeError("No free directory entries in target directory")
+
+        # allocate using next_free_block
+        start_block = self._read_next_free_block()
+        self._write_next_free_block(start_block + num_blocks)
+
+        # write file data
+        for i in range(num_blocks):
+            chunk = data_bytes[i * BLOCK_SIZE:(i + 1) * BLOCK_SIZE]
+            self._write_block(start_block + i, chunk)
+
+        # write directory entry (new layout: store full byte size)
+        entry = bytearray(32)
+        entry[OFF_NAME:OFF_NAME + 16] = target_name.ljust(16).encode('ascii')[:16]
+        entry[OFF_START:OFF_START + 2] = struct.pack('<H', start_block)
+        entry[OFF_NUM_BLOCKS] = num_blocks
+        entry[OFF_ATTR] = ATTR_FILE | (ATTR_SYSTEM if system else 0)
+        entry[OFF_SIZE:OFF_SIZE + 4] = struct.pack('<I', file_size)
+        entry[24:32] = b'\x00' * 8
+
+        parent_buf[entry_offset:entry_offset + 32] = bytes(entry)
+        self._write_dir_buffer(parent_block, parent_buf)
+        return start_block
+
+    # ---- File reading ----
+    def read_file(self, file_name, out_path=None, parent_block=2):
+        buf = self._read_block(parent_block, BLOCK_SIZE * ROOT_DIR_BLOCKS)
+        entries = self._parse_dir_buffer(buf)
+        for e in entries:
+            if e['name'] == file_name and (e['attr'] & ATTR_DIR) == 0:
+                data = bytearray()
+                for i in range(e['num_blocks']):
+                    data.extend(self._read_block(e['start_block'] + i))
+                # Prefer explicit size; fallback to full blocks (compatibility)
+                size = int(e.get('size', 0) or 0)
+                if size <= 0:
+                    total_bytes = e['num_blocks'] * BLOCK_SIZE
+                else:
+                    total_bytes = size
+                data = bytes(data[:total_bytes])
+                if out_path:
+                    os.makedirs(os.path.dirname(out_path), exist_ok=True)
+                    with open(out_path, 'wb') as f:
+                        f.write(data)
+                return data
+        raise FileNotFoundError(file_name)
+
+    # ---- Directory extraction ----
+    def extract_all(self, output_dir, parent_block=2, rel_path=""):
+        target_dir = os.path.join(output_dir, rel_path)
+        os.makedirs(target_dir, exist_ok=True)
+
+        dir_buf = self._read_block(parent_block, BLOCK_SIZE * ROOT_DIR_BLOCKS)
+        entries = self._parse_dir_buffer(dir_buf)
+
+        for e in entries:
+            if e['attr'] & ATTR_DIR:
+                sub_rel = os.path.join(rel_path, e['name'])
+                read_blocks = min(e['num_blocks'], MAX_DIR_BLOCKS_TO_READ)
+                self._extract_dir_to_host(output_dir, e['start_block'], sub_rel, read_blocks)
+            else:
+                self._write_file_and_decode(e, output_dir, rel_path)
+
+    def _extract_dir_to_host(self, output_dir, dir_start_block, rel_path, read_blocks):
+        target_dir = os.path.join(output_dir, rel_path)
+        os.makedirs(target_dir, exist_ok=True)
+        buf = self._read_block(dir_start_block, BLOCK_SIZE * read_blocks)
+        entries = self._parse_dir_buffer(buf)
+        for e in entries:
+            if e['attr'] & ATTR_DIR:
+                print(f"[SKIP-DEEP] {os.path.join(rel_path, e['name'])} (nested dirs not supported)")
+                continue
+            self._write_file_and_decode(e, output_dir, rel_path)
+
+    def _write_file_and_decode(self, e, output_dir, rel_path):
+        out_path = os.path.join(output_dir, rel_path, e['name'])
+        data = b''.join(self._read_block(e['start_block'] + i) for i in range(e['num_blocks']))
+        size = int(e.get('size', 0) or 0)
+        if size <= 0:
+            total_bytes = e['num_blocks'] * BLOCK_SIZE
+        else:
+            total_bytes = size
+        data = data[:total_bytes]
+        os.makedirs(os.path.dirname(out_path), exist_ok=True)
+        with open(out_path, 'wb') as f:
+            f.write(data)
+        print(f"[FILE] {os.path.join(rel_path, e['name'])} ({len(data)} bytes)")
+
+        # decode plaintext files saved as cp437 (only for .txt by default)
+        if e['name'].lower().endswith(".txt"):
+            try:
+                decoded_text = data.decode('cp437')
+                decoded_path = os.path.join(output_dir, rel_path, f"{e['name']}.decoded.txt")
+                with open(decoded_path, 'w', encoding='utf-8') as df:
+                    df.write(decoded_text)
+                print(f"[DECODED] {decoded_path}")
+            except Exception as ex:
+                print(f"[DECODE-ERROR] {e['name']}: {ex}")
+
+    # ---- Packing helper: create a disk from a folder ----
+    def pack_from_folder(self, source_dir, size_kb=None, volume_name="NATRIUM"):
+        """
+        Build a disk image from a folder structure.
+        - top-level files -> root
+        - top-level directories -> subdirectories (only one level deep)
+        - ignores deeper nested directories
+        - encodes plaintext files to cp437 for storage (based on extension)
+        - automatically marks .sys files and removes .sys before extension if present
+        """
+        if not os.path.isdir(source_dir):
+            raise NotADirectoryError(source_dir)
+
+        # Helper for system file detection and renaming
+        def _infer_system_file_and_name(name):
+            lower = name.lower()
+            system = False
+            if lower.endswith(".sys"):
+                system = True
+                store_name = name
+            elif ".sys." in lower:
+                system = True
+                idx = lower.rindex(".sys.")
+                store_name = name[:idx] + name[idx+4:]
+            else:
+                store_name = name
+            return store_name[:16], system
+
+        # gather files
+        top_files = []
+        top_dirs = {}
+        for entry in sorted(os.listdir(source_dir)):
+            full = os.path.join(source_dir, entry)
+            if os.path.isfile(full):
+                top_files.append((entry, full))
+            elif os.path.isdir(full):
+                files = []
+                for f in sorted(os.listdir(full)):
+                    fp = os.path.join(full, f)
+                    if os.path.isfile(fp):
+                        files.append((f, fp))
+                top_dirs[entry] = files
+
+        # compute minimal size if not provided
+        if size_kb is None:
+            total_bytes = BLOCK_SIZE * (1 + 1 + ROOT_DIR_BLOCKS)
+            total_bytes += len(top_dirs) * (BLOCK_SIZE * ROOT_DIR_BLOCKS)
+            for name, fp in top_files:
+                s = os.path.getsize(fp)
+                blocks = max(1, (s + BLOCK_SIZE - 1) // BLOCK_SIZE)
+                total_bytes += blocks * BLOCK_SIZE
+            for dname, files in top_dirs.items():
+                for name, fp in files:
+                    s = os.path.getsize(fp)
+                    blocks = max(1, (s + BLOCK_SIZE - 1) // BLOCK_SIZE)
+                    total_bytes += blocks * BLOCK_SIZE
+            total_bytes += BLOCK_SIZE * 10
+            size_kb = math.ceil(total_bytes / 1024)
+
+        # create image and populate
+        self.create(size_kb, volume_name)
+        self.open('r+b')
+        try:
+            dir_map = {}  # name -> start_block
+            for dname in sorted(top_dirs.keys()):
+                dname_trunc = dname[:16]
+                start = self.mkdir(dname_trunc)
+                dir_map[dname] = start
+                print(f"[MKDIR] {dname} -> block {start}")
+
+            # add top-level files
+            for name, fp in top_files:
+                stored_name, is_system = _infer_system_file_and_name(name)
+                ext = os.path.splitext(name)[1].lower()
+                if ext in TEXT_EXTS:
+                    with open(fp, 'r', encoding='cp437', errors='replace') as f:
+                        txt = f.read()
+                    data = txt.encode('cp437', errors='replace')
+                    start = self.add_file_bytes(stored_name, data, parent_block=2, system=is_system)
+                else:
+                    start = self.add_file(fp, stored_name, parent_block=2, system=is_system)
+                print(f"[ADD] root: {name} -> block {start} (system={is_system})")
+
+            # add files into subdirectories
+            for dname, files in sorted(top_dirs.items()):
+                parent_block = dir_map[dname]
+                for name, fp in files:
+                    stored_name, is_system = _infer_system_file_and_name(name)
+                    ext = os.path.splitext(name)[1].lower()
+                    if ext in TEXT_EXTS:
+                        with open(fp, 'r', encoding='cp437', errors='replace') as f:
+                            txt = f.read()
+                        data = txt.encode('cp437', errors='replace')
+                        start = self.add_file_bytes(stored_name, data, parent_block=parent_block, system=is_system)
+                    else:
+                        start = self.add_file(fp, stored_name, parent_block=parent_block, system=is_system)
+                    print(f"[ADD] {dname}/{name} -> block {start} (system={is_system})")
+        finally:
+            self.close()
+
+
+# ---- CLI ----
+def main():
+    parser = argparse.ArgumentParser(description="NatriumFS v1 utility")
+    parser.add_argument("disk", help="Path to NatriumFS disk image")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+
+    create = subparsers.add_parser("create", help="Create a new NatriumFS disk image")
+    create.add_argument("size_kb", type=int, help="Disk size in KB")
+    create.add_argument("--volume", default="NATRIUM", help="Volume name")
+
+    add = subparsers.add_parser("add", help="Add file to disk")
+    add.add_argument("file", help="Host file to add")
+    add.add_argument("--name", help="Target filename on disk")
+    add.add_argument("--dir", help="Target subdirectory name (optional)")
+    add.add_argument("--sys", help="Sets the file to have the System attribute", action="store_true")
+
+    mkdir_cmd = subparsers.add_parser("mkdir", help="Create a subdirectory in root")
+    mkdir_cmd.add_argument("name", help="Subdirectory name")
+
+    list_cmd = subparsers.add_parser("list", help="List files in root or subdirectory")
+    list_cmd.add_argument("--dir", help="Subdirectory to list (optional)")
+
+    read_cmd = subparsers.add_parser("read", help="Read a file from disk")
+    read_cmd.add_argument("file", help="Filename on disk")
+    read_cmd.add_argument("--out", help="Output path on host (optional)")
+    read_cmd.add_argument("--dir", help="Subdirectory to read from (optional)")
+
+    extractall = subparsers.add_parser("extractall", help="Extract entire disk to host")
+    extractall.add_argument("outdir", help="Destination directory on host")
+
+    pack = subparsers.add_parser("pack", help="Pack a folder into a NatriumFS disk image")
+    pack.add_argument("source", help="Source folder to pack (top-level files + one-level subdirs)")
+    pack.add_argument("--size-kb", type=int, help="Optional disk size in KB. If omitted, auto-calculated.")
+    pack.add_argument("--volume", default="NATRIUM", help="Volume name for created image")
+
+    args = parser.parse_args()
+    fs = NatriumFS(args.disk)
+
+    if args.command == "create":
+        fs.create(args.size_kb, args.volume)
+        print(f"Created NatriumFS {args.size_kb}KB disk: {args.disk}")
+        return
+
+    if args.command == "pack":
+        fs.pack_from_folder(args.source, size_kb=args.size_kb, volume_name=args.volume)
+        print(f"Packed folder '{args.source}' into disk image '{args.disk}' (size_kb={args.size_kb or 'auto'})")
+        return
+
+    fs.open('r+b')
+    try:
+        if args.command == "mkdir":
+            block = fs.mkdir(args.name)
+            print(f"Created subdirectory '{args.name}' at block {block}")
+
+        elif args.command == "add":
+            parent_block = 2
+            if args.dir:
+                block = fs.find_dir_by_name(args.dir)
+                if not block:
+                    raise FileNotFoundError(f"Subdirectory '{args.dir}' not found")
+                parent_block = block
+            start = fs.add_file(args.file, args.name, parent_block, args.sys)
+            print(f"Added '{args.file}' as '{args.name or os.path.basename(args.file)}' at block {start}")
+
+        elif args.command == "list":
+            parent_block = 2
+            if args.dir:
+                block = fs.find_dir_by_name(args.dir)
+                if not block:
+                    raise FileNotFoundError(f"Subdirectory '{args.dir}' not found")
+                parent_block = block
+            entries = fs.list_dir(parent_block)
+            for e in entries:
+                type_str = "DIR" if (e['attr'] & ATTR_DIR) else "FILE"
+                print(f"{e['name']:16} {type_str} blocks={e['num_blocks']} start={e['start_block']} size={e.get('size',0)}")
+
+        elif args.command == "read":
+            parent_block = 2
+            if args.dir:
+                block = fs.find_dir_by_name(args.dir)
+                if not block:
+                    raise FileNotFoundError(f"Subdirectory '{args.dir}' not found")
+                parent_block = block
+            data = fs.read_file(args.file, args.out, parent_block=parent_block)
+            if not args.out:
+                print(f"Read {len(data)} bytes from '{args.file}'")
+
+        elif args.command == "extractall":
+            fs.extract_all(args.outdir)
+            print(f"Extracted entire disk to '{args.outdir}'")
+
+    finally:
+        fs.close()
+
+
+if __name__ == "__main__":
+    main()
