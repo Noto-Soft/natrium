@@ -22,8 +22,6 @@ cp build/command.sys natrium/System/
 cp build/unreal.sys natrium/System/
 cp assets/logo.txt natrium/System/logo.sys.txt
 cp assets/boot.txt natrium/System/boot.sys.txt
-cp assets/reminder.txt natrium/Documents/
-cp assets/yep.txt natrium/Documents/
 cp build/hello.exe natrium/
 cp build/bitmap.exe natrium/
 cp build/bliss.bmp natrium/
@@ -34,4 +32,4 @@ rm -rf natrium
 
 dd if=build/boot.bin of=natrium.img conv=notrunc
 
-qemu-system-i386 -drive file=natrium.img,if=floppy,format=raw -monitor stdio
+qemu-system-i386 -drive file=natrium.img,if=floppy,format=raw -monitor stdio -m 2176k

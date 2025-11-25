@@ -38,6 +38,21 @@ main:
 
     call enable_cursor
 
+    mov ax, 0xe801
+    int 0x15
+    jc mem_test_error
+    cmp ah, 0x86
+    je mem_test_error
+    cmp ah, 0x80
+    je mem_test_error
+    jcxz .use_axbx
+
+    mov ax, cx
+    mov bx, dx
+.use_axbx:
+    cmp ax, 1024
+    jnae mem_test_too_small
+
     xor ax, ax
     mov dl, [drive]
     lea si, [folder_system]
@@ -140,6 +155,8 @@ main:
 .return_point_unreal_sys:
     pop es
     pop ds
+
+    call clear_krnl_prog_loading_space
     
     mov ax, [folder_system_block]
     mov cl, [folder_system_size]
@@ -172,6 +189,26 @@ halt:
     hlt
 
 clear_file_loading_space:
+    push ax
+    push cx
+    push di
+    push es
+
+    mov ax, 0x4000
+    mov es, ax
+    xor di, di
+    xor ax, ax
+    mov cx, 0x8000
+    cld
+    rep stosw
+
+    pop es
+    pop di
+    pop cx
+    pop ax
+    ret
+
+clear_krnl_prog_loading_space:
     push ax
     push cx
     push di
@@ -881,6 +918,14 @@ bad_fs:
     lea si, [error_wrong_filesystem]
     jmp kernel_panic
 
+mem_test_error:
+    lea si, [error_mem_test_failed]
+    jmp kernel_panic
+
+mem_test_too_small:
+    lea si, [error_mem_test_under]
+    jmp kernel_panic
+
 kernel_panic:
     mov ax, cs
     mov ds, ax
@@ -899,9 +944,11 @@ kernel_panic:
     cli
     hlt
 
-error_wrong_filesystem db "Kernel panic: Bad FS", endl, 0
+error_wrong_filesystem db "Kernel panic: Bad filesystem", endl, 0
 error_floppy db "Kernel panic: Floppy error", endl, 0
 error_critical_files_missing db "Kernel panic: Critical files missing", endl, 0
+error_mem_test_failed db "Kernel panic: Failed to test high memory", endl, 0
+error_mem_test_under db "Kernel panic: Memory is under 2mb", endl, 0
 
 cursor_shape dw 0x003f
 cursor_position dw 0

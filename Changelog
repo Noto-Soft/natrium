@@ -9,3 +9,4 @@
 0.9 - Create bitmap drawing program and move everything to the A: drive
 0.10 - Add exact byte file size to the NatriumFS spec, finalizing v1 and making it stable, as well as updating dir command to add file sizes. Update bitmap drawing program to only set VGA Graphics mode after checking for errors, add dword decimal printing to kernel, add newline printing interrupt and update most of codebase to use it to improve speed.
 0.11 - New kernel panic messages, add RLE to bitmap drawing and nsbmp spec (NSBMP 2.1), update hijack.exe to be MORE destructive lol
+0.12 - Update memory map, test memory in kernel, actually zero memory before loading files

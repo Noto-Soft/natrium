@@ -221,6 +221,8 @@ parse_prompt:
     test ch, 0x80
     jnz .failure
 .gotten:
+    call clear_prog_loading_space
+
     push es
     lea bx, [0x8000]
     mov es, bx
@@ -321,12 +323,26 @@ parse_cd:
     cmp al, " "
     je .find_next_token
     cmp al, "/"
-    jne .not_root
+    je .root_check
+    cmp al, "."
+    je .previous_check
+    jmp .not_root
+.root_check:
     mov al, [si]
     test al, al
     jz .root
     cmp al, " "
     je .root
+    jmp .not_root
+.previous_check:
+    mov al, [si]
+    cmp al, "."
+    jne .not_root
+    mov al, [si+1]
+    test al, al
+    jz .previous
+    cmp al, " "
+    je .previous
 .not_root:
     dec si
     call move_filename
@@ -362,6 +378,9 @@ parse_cd:
     stosb
     loop .set_cwd_loop
     jmp .set_cwd_loop_after
+.previous:
+    cmp [directory_block], 0
+    je .cd_fail_root
 .root:
     mov [directory_block], 0
     mov byte [current_working_directory], 0
@@ -394,7 +413,27 @@ parse_cd:
 .cd_fail_no_argument:
     xor ah, ah
     mov bl, 0x4
-    lea si, [error_no_argument]
+    lea si, [error_no_argument_1]
+    int 0x21
+    inc ah
+    mov al, "1"
+    int 0x21
+    dec ah
+    lea si, [error_no_argument_2]
+    int 0x21
+    inc ah
+    mov al, "0"
+    int 0x21
+    dec ah
+    lea si, [error_no_argument_3]
+    int 0x21
+    popa
+    mov ax, 2
+    ret
+.cd_fail_root:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_at_root]
     int 0x21
     popa
     mov ax, 2
@@ -429,6 +468,7 @@ parse_type_or_exec:
     jz .fail_lack
     test ch, 0x80
     jnz .fail_type
+    call clear_file_loading_space
     push es
     lea bx, [0x3000]
     mov es, bx
@@ -456,7 +496,19 @@ parse_type_or_exec:
 .fail_no_argument:
     xor ah, ah
     mov bl, 0x4
-    lea si, [error_no_argument]
+    lea si, [error_no_argument_1]
+    int 0x21
+    inc ah
+    mov al, "1"
+    int 0x21
+    dec ah
+    lea si, [error_no_argument_2]
+    int 0x21
+    inc ah
+    mov al, "0"
+    int 0x21
+    dec ah
+    lea si, [error_no_argument_3]
     int 0x21
     popa
     mov ax, 2
@@ -710,6 +762,46 @@ set_drive:
     popa
     ret
 
+clear_file_loading_space:
+    push ax
+    push cx
+    push di
+    push es
+
+    mov ax, 0x4000
+    mov es, ax
+    xor di, di
+    xor ax, ax
+    mov cx, 0x8000
+    cld
+    rep stosw
+
+    pop es
+    pop di
+    pop cx
+    pop ax
+    ret
+
+clear_prog_loading_space:
+    push ax
+    push cx
+    push di
+    push es
+
+    mov ax, 0x8000
+    mov es, ax
+    xor di, di
+    xor ax, ax
+    mov cx, 0x8000
+    cld
+    rep stosw
+
+    pop es
+    pop di
+    pop cx
+    pop ax
+    ret
+
 directory_of db "Directory of ", 0
 
 str_directory db "<DIR>", 0
@@ -733,15 +825,18 @@ msg_help db "List of commands:", endl, \
             "<executable file name> [executable arguments]", endl, \
             0
 
-error_cd_format db "Directory format must be like so: DirName (or / for root)", endl, 0
+error_cd_format db "Directory format must be like so: DirName (or / or .. both for root)", endl, 0
 error_not_file db "File specified is a directory!", endl, 0
 error_not_exist db "File specified does not exist.", endl, 0
 error_not_directory db "Directory specified is a file!", endl, 0
 error_dir_not_exist db "Directory specified does not exist.", endl, 0
-error_no_argument db "No argument supplied to the command, even though it required one.", endl, 0
+error_no_argument_1 db "Command requires ", 0
+error_no_argument_2 db " argument(s), ", 0
+error_no_argument_3 db " supplied.", endl, 0
 error_not_command db "Not a command, nor an executable file.", endl, 0
 error_invalid_drive db "Invalid drive letter/number! (Accepted: A/a/B/b)", endl, 0
 error_drive_missing db "Drive not inserted.", endl, 0
+error_at_root db "Cannot go backwards a directory: Already at root!", endl, 0
 
 drive db ?
 
