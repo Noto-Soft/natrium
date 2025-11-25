@@ -48,11 +48,8 @@ main:
     jz .failure
     jmp .start_reading_files
 .failure:
-    mov bl, 0x7
-    lea si, [natrium]
-    call puts
-
-    jmp $
+    lea si, [error_critical_files_missing]
+    jmp kernel_panic
 .start_reading_files:
     mov [folder_system_block], ax
     mov [folder_system_size], cl
@@ -792,12 +789,8 @@ write_blocks:
     ret
 
 floppy_error:
-    mov ax, cs
-    mov ds, ax
-    mov bl, 0x7
     lea si, [error_floppy]
-    call puts
-    jmp $
+    jmp kernel_panic
 
 ; ax - starting block of directory (will read from root directory if 0)
 ; cl - size of directory in blocks (doesn't matter if ax is 0)
@@ -885,21 +878,35 @@ get_file:
     ret
 
 bad_fs:
+    lea si, [error_wrong_filesystem]
+    jmp kernel_panic
+
+kernel_panic:
     mov ax, cs
     mov ds, ax
-    mov bl, 0x7
-    lea si, [error_wrong_filesystem]
+    mov bl, 0x17
+    call clear_screen
+    call disable_cursor
+    xor cx, cx
+    call set_cursor_position
+    push si
+    mov bl, 0x71
+    lea si, [natrium]
     call puts
-    jmp $
+    pop si
+    mov bl, 0x17
+    call puts
+    cli
+    hlt
 
-error_kernel_not_found db "File missing", endl, 0
-error_wrong_filesystem db "Incorrect fs version", endl, 0
-error_floppy db "Floppy error", endl, 0
+error_wrong_filesystem db "Kernel panic: Bad FS", endl, 0
+error_floppy db "Kernel panic: Floppy error", endl, 0
+error_critical_files_missing db "Kernel panic: Critical files missing", endl, 0
 
 cursor_shape dw 0x003f
 cursor_position dw 0
 
-natrium db "Natrium", endl, endl, "Critical files missing...", endl, 0
+natrium db "Natrium", endl, endl, 0
 
 align 16
 

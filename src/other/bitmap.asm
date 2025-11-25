@@ -62,6 +62,8 @@ parse_header:
     mov dx, 256
     cmp al, "C"
     je set_palletes
+    cmp al, "L"
+    je set_palletes
     mov dx, 16
     cmp al, "R"
     je set_palletes
@@ -76,7 +78,7 @@ parse_header:
 set_palletes:
     mov ax, 0x13
     int 0x10
-    
+
     xor al, al
 .loop:
     mov bx, [si]
@@ -94,6 +96,8 @@ draw_bmp:
     je draw_8bpp
     cmp al, "C"
     je draw_8bpp
+    cmp al, "L"
+    je draw_8bpp_rle
     cmp al, "R"
     je draw_4bpp
     cmp al, "T"
@@ -119,6 +123,12 @@ draw_4bpp:
 
 draw_8bpp:
     call draw_fullscreen_bmp
+    xor ah, ah
+    int 0x16
+    jmp exit
+
+draw_8bpp_rle:
+    call draw_fullscreen_bmp_rle
     xor ah, ah
     int 0x16
     ; jmp exit
@@ -200,6 +210,27 @@ draw_fullscreen_bmp:
     pop cx
     pop bx
     pop ax
+    ret
+
+; ds:si - bitmap data
+draw_fullscreen_bmp_rle:
+    pusha
+    xor bx, bx
+    xor edi, edi
+
+.main_loop:
+    xor ch, ch
+    mov cl, [si+bx]
+    mov al, [si+bx+1]
+.write_times_loop:
+    mov [fs:0xa0000+edi], al
+    inc di
+    loop .write_times_loop
+    add bx, 2
+    cmp di, 320*200
+    jb .main_loop
+
+    popa
     ret
 
 ; ds:si - bitmap data
