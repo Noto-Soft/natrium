@@ -75,6 +75,95 @@ parse_prompt:
     jz .dir
     jmp .not_dir
 .dir:
+    mov al, [di+1]
+    cmp al, 0x20
+    je .use_cwd
+    test al, al
+    jz .use_cwd
+
+    clc
+    lea si, [input_buffer+4]
+    lea di, [filename_buffer]
+    mov cx, 16
+.dir_name_load_loop:
+    mov al, [si]
+    inc si
+    jc .set_space
+    test al, al
+    jz .set_space
+    mov [di], al
+    inc di
+    loop .dir_name_load_loop
+    jmp .dir_read_dir
+.set_space:
+    mov byte [di], " "
+    inc di
+    loop .dir_name_load_loop
+.dir_read_dir:
+    mov ax, [directory_block]
+    mov [tmpw], ax
+    mov al, [directory_size]
+    mov [tmpb], al
+
+    mov ax, 0
+    mov dl, [drive]
+    lea si, [filename_buffer]
+    int 0x24
+    test cl, cl
+    jz .dir_fail_not_exist
+    test ch, 0x80
+    jz .dir_fail_not_dir
+
+    mov [directory_block], ax
+    mov [directory_size], cl
+
+    xor ah, ah
+    lea si, [directory_of]
+    int 0x21
+    mov ah, 0x3
+    mov cx, 16
+    lea si, [filename_buffer]
+    int 0x21
+
+    mov ah, 0x1
+    mov al, endl
+    int 0x21
+    mov al, " "
+    int 0x21
+
+    call dir
+
+    mov ax, [tmpw]
+    mov [directory_block], ax
+    mov al, [tmpb]
+    mov [directory_size], al
+
+    call read_directory
+
+    mov ah, 0x1
+    mov al, 0xd
+    int 0x21
+
+    jmp prompt
+.dir_fail_not_exist:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_dir_not_exist]
+    int 0x21
+    jmp .dir_fail_end
+.dir_fail_not_dir:
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_not_directory]
+    int 0x21
+.dir_fail_end:
+    mov ax, [tmpw]
+    mov [directory_block], ax
+    mov al, [tmpb]
+    mov [directory_size], al
+    mov bl, 0x7
+    jmp prompt
+.use_cwd:
     xor ah, ah
     lea si, [directory_of]
     int 0x21
@@ -845,6 +934,9 @@ directory_size db ?
 directory_name db 16 dup(?)
 
 current_working_directory db 17 dup(?)
+
+tmpw dw ?
+tmpb db ?
 
 input_buffer db MAX_INPUT_SIZE+1 dup(?)
 MAX_INPUT_SIZE = 256

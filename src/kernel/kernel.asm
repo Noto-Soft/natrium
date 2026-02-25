@@ -127,6 +127,7 @@ main:
     patch 0x22, int22, ax
     patch 0x23, int23, ax
     patch 0x24, int24, ax
+    patch 0x25, int25, ax
     pop es
 
     mov ax, [folder_system_block]
@@ -263,6 +264,10 @@ int23:
 
 int24:
     call get_file
+    iret
+
+int25:
+    call get_file_of_type
     iret
 
 enable_cursor:
@@ -828,6 +833,26 @@ write_blocks:
 floppy_error:
     lea si, [error_floppy]
     jmp kernel_panic
+
+; same as get_file but bh is 0 for file and not 0 for directory expected
+; if entry of wrong type is found it just returns as if the file is not there
+get_file_of_type:
+    test bh, bh
+    jz .expect_file
+    ; expecting directory
+    call get_file
+    test ch, 0x80
+    jz .fail
+    ret
+.expect_file:
+    call get_file
+    test ch, 0x80
+    jnz .fail
+    ret
+.fail:
+    xor ax, ax
+    xor cl, cl
+    ret
 
 ; ax - starting block of directory (will read from root directory if 0)
 ; cl - size of directory in blocks (doesn't matter if ax is 0)

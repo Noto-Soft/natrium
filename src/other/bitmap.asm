@@ -34,7 +34,27 @@ read_image:
     mov ax, cs
     mov ds, ax
 
+    cmp word [image_name], "/?"
+    jne .continue_read
+    cmp byte [image_name+2], " "
+    jne .continue_read
+
+    xor ah, ah
+    mov bl, 0x7
+    lea si, [help_msg]
+    int 0x21
+
+    retf
+.continue_read:
     mov ax, 0
+    mov dl, [drive]
+    lea si, [image_dir_name]
+    int 0x24
+    test cl, cl
+    jz id_fail_not_exist
+    test ch, 0x80
+    jz id_fail_not_dir
+    
     mov dl, [drive]
     lea si, [image_name]
     int 0x24
@@ -170,6 +190,24 @@ fail_not_file:
     xor ah, ah
     mov bl, 0x4
     lea si, [error_not_file]
+    int 0x21
+    retf
+
+id_fail_not_exist:
+    mov ax, cs
+    mov ds, ax
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_id_not_exist]
+    int 0x21
+    retf
+
+id_fail_not_dir:
+    mov ax, cs
+    mov ds, ax
+    xor ah, ah
+    mov bl, 0x4
+    lea si, [error_id_not_file]
     int 0x21
     retf
 
@@ -343,8 +381,13 @@ error_not_nsbmp2 db "File specified is not NSBMP 2.0 format.", endl, 0
 error_not_valid db "Bitmap specified does not have a supported format.", endl, 0
 error_not_exist db "File specified does not exist", endl, 0
 error_not_file db "File specified is a directory!", endl, 0
+error_id_not_exist db "This drive does not have an Images directory!", endl, 0
+error_id_not_file db "Found ", 34, "Images", 34, " entry, but it is a file!", endl, 0
 
 image_name db "bliss.bmp       "
+image_dir_name db "Images          "
+
+help_msg db "Usage: bitmap.exe [bitmap file (in <current drive>:/Images/]", endl, 0
 
 drive db ?
 directory_block dw ?

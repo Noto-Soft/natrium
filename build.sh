@@ -17,6 +17,7 @@ fasm src/other/hijack.asm build/hijack.exe
 mkdir natrium/
 mkdir natrium/System/
 mkdir natrium/Documents/
+mkdir natrium/Images/
 cp build/kernel.sys natrium/
 cp build/command.sys natrium/System/
 cp build/unreal.sys natrium/System/
@@ -24,8 +25,8 @@ cp assets/logo.txt natrium/System/logo.sys.txt
 cp assets/boot.txt natrium/System/boot.sys.txt
 cp build/hello.exe natrium/
 cp build/bitmap.exe natrium/
-cp build/bliss.bmp natrium/
-cp build/i386.bmp natrium/
+cp build/bliss.bmp natrium/Images/
+cp build/i386.bmp natrium/Images/
 cp build/hijack.exe natrium/
 ./tools/nfs natrium.img pack --size-kb 1440 --volume NATRIUM natrium
 rm -rf natrium
