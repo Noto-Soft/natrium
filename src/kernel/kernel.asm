@@ -28,7 +28,7 @@ main:
     and cl, 0x3F
     xor ch, ch
     mov [sectors_per_track], cx
- 
+
     inc dh
     mov byte [heads], dh
     mov byte [heads + 1], 0
@@ -158,7 +158,11 @@ main:
     pop ds
 
     call clear_krnl_prog_loading_space
-    
+
+    mov bl, 0xf
+    mov cl, [drive]
+    call putd
+
     mov ax, [folder_system_block]
     mov cl, [folder_system_size]
     mov dl, [drive]

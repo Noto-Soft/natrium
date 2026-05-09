@@ -23,12 +23,52 @@ start:
     and cl, 0x3F
     xor ch, ch
     mov [sectors_per_track], cx
- 
+
     inc dh
     mov byte [heads], dh
     mov byte [heads + 1], 0
 
+    mov ax, 1
+    mov cl, 1
+    mov dl, [drive]
+    lea bx, [0x7e00]
+    call disk_read
+
     lea si, [yes]
+    call puts
+
+    mov ah, 0x86
+    mov cx, 0xf
+    mov dx, 0x4240
+    int 0x15
+
+    mov dl, [drive]
+    cmp dl, 0x80
+    jne main
+
+    lea si, [prompt]
+    call puts
+
+    mov ah, 0x86
+    mov cx, 0xf
+    mov dx, 0x4240
+    int 0x15
+
+    mov ah, 0x1
+    int 0x16
+    jz main
+    xor ah, ah
+    int 0x16
+    xor dl, dl
+    mov [drive], dl
+    mov ax, [4 * 0x13]
+    mov word [old_13_ptr], ax
+    mov ax, [4 * 0x13 + 2]
+    mov word [old_13_ptr + 2], ax
+    mov word [4 * 0x13], new_13
+    mov word [4 * 0x13 + 2], 0
+
+    lea si, [treat]
     call puts
 
     mov ah, 0x86
@@ -81,7 +121,7 @@ main:
     mov es, bx
     xor bx, bx
     call read_blocks
-    
+
     jmp 0x1000:0x0000
 
 bad_fs:
@@ -209,7 +249,7 @@ disk_read:
     call lba_to_chs
     ; AL = number of sectors to read
     pop ax
-    
+
     mov ah, 0x02
     ; retry count
     mov di, 3
@@ -300,18 +340,35 @@ read_blocks:
 floppy_error:
     jmp $
 
-error_kernel_not_found db "File 'kernel.sys' missing", endl, 0
-error_wrong_filesystem db "Incorrect fs version", endl, 0
-
-kernel_sys db "kernel.sys      "
-
-yes db "Lithium Bootloader 1.1", endl, 0
+new_13:
+    test dl, dl
+    jnz .dont_set
+    mov dl, 0x80
+.dont_set:
+    push ax
+    xor ax, ax
+    mov gs, ax
+    pop ax
+    jmp far [gs:old_13_ptr]
 
 drive db ?
 sectors_per_track dw ?
 heads dw ?
 
+old_13_ptr dd ?
+
 db 510-($-$$) dup(0)
 dw 0xaa55
 
-label buffer 
+kernel_sys db "kernel.sys      "
+
+error_kernel_not_found db "File 'kernel.sys' missing", endl, 0
+error_wrong_filesystem db "Incorrect fs version", endl, 0
+
+yes db "Lithium Bootloader 1.2", endl, 0
+
+prompt db "You are booting from HDD (0x80).", endl, "Press any key to treat HDD as FDD...", endl, 0
+
+treat db "Patching INT 13H to replace 0x00 with 0x80", endl, 0
+
+label buffer

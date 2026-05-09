@@ -379,7 +379,7 @@ reset_vga:
 
 error_not_nsbmp2 db "File specified is not NSBMP 2.0 format.", endl, 0
 error_not_valid db "Bitmap specified does not have a supported format.", endl, 0
-error_not_exist db "File specified does not exist", endl, 0
+error_not_exist db "File specified does not exist (files are loaded from the Images directory)", endl, 0
 error_not_file db "File specified is a directory!", endl, 0
 error_id_not_exist db "This drive does not have an Images directory!", endl, 0
 error_id_not_file db "Found ", 34, "Images", 34, " entry, but it is a file!", endl, 0
@@ -387,7 +387,7 @@ error_id_not_file db "Found ", 34, "Images", 34, " entry, but it is a file!", en
 image_name db "bliss.bmp       "
 image_dir_name db "Images          "
 
-help_msg db "Usage: bitmap.exe [bitmap file (in <current drive>:/Images/]", endl, 0
+help_msg db "Usage: bitmap.exe [bitmap file (in /Images/)]", endl, 0
 
 drive db ?
 directory_block dw ?

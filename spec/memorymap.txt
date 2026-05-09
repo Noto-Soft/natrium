@@ -1,4 +1,4 @@
-0x00000500-0x0000ffff: technically free
+0x00000500-0x0000ffff: reserved for bootloader shenanigans
 0x00010000-0x0001ffff: reserved for kernel (keeper of the interrupts)
 0x00020000-0x0003ffff: kernel programs and program memory
 0x00040000-0x0007ffff: completely free
